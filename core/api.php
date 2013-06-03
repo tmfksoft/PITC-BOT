@@ -1,84 +1,92 @@
 <?php
+class core {
+	private internal($text) {
+		global $rawlog;
+		$rawlog[] = $text;
+		echo $text."\n";
+	}
+}
+$core = new core;
 class pitcapi {
 	public function log($text = false) {
-		global $cserver;
+		global $core,$cserver;
 		if (!$text) {
 			die("Error. Missing TEXT in function LOG");
 		}
 		else {
-			$this->internal($text);
+			$core->internal($text);
 		}
 	}
 	public function addCommand($command = false,$function = false) {
-		$this->internal(" ERROR. PITCBots does not support commands! Ignoring handler.");
+		$core->internal(" ERROR. PITCBots does not support commands! Ignoring handler.");
 	}
 	public function addTextHandler($function = false) {
-		global $api_messages,$active;
+		global $core,$api_messages,$active;
 		if (!$function) {
-			$this->internal(" ERROR. Missing FUNCTION in function ADDTEXTHANDLER");
+			$core->internal(" ERROR. Missing FUNCTION in function ADDTEXTHANDLER");
 		}
 		else {
 			$api_messages[] = strtolower($function);
 		}
 	}
 	public function addConnectHandler($function = false) {
-		global $api_connect,$active;
+		global $core,$api_connect,$active;
 		if (!$function) {
-			$this->internal(" ERROR. Missing FUNCTION in function ADDCONNECTHANDLER");
+			$core->internal(" ERROR. Missing FUNCTION in function ADDCONNECTHANDLER");
 		}
 		else {
 			$api_connect[] = strtolower($function);
 		}
 	}
 	public function addActionHandler($function = false) {
-		global $api_actions,$active;
+		global $core,$api_actions,$active;
 		if (!$function) {
-			$this->internal(" ERROR. Missing FUNCTION in function ADDACTIONHANDLER");
+			$core->internal(" ERROR. Missing FUNCTION in function ADDACTIONHANDLER");
 		}
 		else {
 			$api_actions[] = strtolower($function);
 		}
 	}
 	public function addStartHandler($function = false) {
-		global $api_start,$active;
+		global $core,$api_start,$active;
 		if (!$function) {
-			$this->internal(" ERROR. Missing FUNCTION in function ADDSTARTHANDLER");
+			$core->internal(" ERROR. Missing FUNCTION in function ADDSTARTHANDLER");
 		}
 		else {
 			$api_start[] = strtolower($function);
 		}
 	}
 	public function addJoinHandler($function = false) {
-		global $api_joins,$active;
+		global $core,$api_joins,$active;
 		if (!$function) {
-			$this->internal(" ERROR. Missing FUNCTION in function ADDJOINHANDLER");
+			$core->internal(" ERROR. Missing FUNCTION in function ADDJOINHANDLER");
 		}
 		else {
 			$api_joins[] = strtolower($function);
 		}
 	}
 	public function addPartHandler($function = false) {
-		global $api_parts,$active;
+		global $core,$api_parts,$active;
 		if (!$function) {
-			$this->internal(" ERROR. Missing FUNCTION in function ADDPARTHANDLER");
+			$core->internal(" ERROR. Missing FUNCTION in function ADDPARTHANDLER");
 		}
 		else {
 			$api_parts[] = strtolower($function);
 		}
 	}
 	public function addTickHandler($function = false) {
-		global $api_tick,$active;
+		global $core,$api_tick,$active;
 		if (!$function) {
-			$this->internal(" ERROR. Missing FUNCTION in function ADDTICKHANDLER");
+			$core->internal(" ERROR. Missing FUNCTION in function ADDTICKHANDLER");
 		}
 		else {
 			$api_tick[] = strtolower($function);
 		}
 	}
 	public function addRawHandler($function = false) {
-		global $api_raw,$active;
+		global $core,$api_raw,$active;
 		if (!$function) {
-			$this->internal(" ERROR. Missing FUNCTION in function ADDRAWHANDLER");
+			$core->internal(" ERROR. Missing FUNCTION in function ADDRAWHANDLER");
 		}
 		else {
 			$api_raw[] = strtolower($function);
@@ -86,77 +94,77 @@ class pitcapi {
 	}
 	// Now we add the commands.
 	public function pecho($text = false,$window = false) {
-		global $active;
+		global $core,$active;
 		if (!$text) {
-			$this->internal(" ERROR. Missing TEXT in function PECHO");
+			$core->internal(" ERROR. Missing TEXT in function PECHO");
 		}
 		else {
 			// PITCBots unlike PITC lacks windows and only has one window, The Terminal
-			$this->internal($text);
+			$core->internal($text);
 		}
 	}
 	public function msg($channel = false,$text = false) {
-		global $log_irc, $sid, $cnick;
+		global $core,$log_irc, $sid, $cnick;
 		if (!$channel) {
-			$this->internal(" ERROR. Missing TEXT in function MSG");
+			$core->internal(" ERROR. Missing TEXT in function MSG");
 		}
 		else if (!$text) {
-			$this->internal(" ERROR. Missing TEXT in function MSG");
+			$core->internal(" ERROR. Missing TEXT in function MSG");
 		}
 		else {
 			if ($sid) {
 				fputs($sid,"PRIVMSG ".$channel." :".$text."\n");
 				if ($log_irc) {
-					$this->internal($channel.": <".$cnick."> ".$text);
+					$core->internal($channel.": <".$cnick."> ".$text);
 				}
 			}
 			else {
-				$this->internal(" ERROR. PITCBots is not CONNECTED to IRC. Cannot MSG.");
+				$core->internal(" ERROR. PITCBots is not CONNECTED to IRC. Cannot MSG.");
 			}
 		}
 	}
 	public function notice($channel = false,$text = false) {
-		global $log_irc, $sid, $cnick;
+		global $core,$log_irc, $sid, $cnick;
 		if (!$channel) {
-			$this->internal(" ERROR. Missing TEXT in function NOTICE");
+			$core->internal(" ERROR. Missing TEXT in function NOTICE");
 		}
 		else if (!$text) {
-			$this->internal(" ERROR. Missing TEXT in function NOTICE");
+			$core->internal(" ERROR. Missing TEXT in function NOTICE");
 		}
 		else {
 			if ($sid) {
 				fputs($sid,"NOTICE ".$channel." :".$text."\n");
 				if ($log_irc) {
-					$this->internal(" -".$cnick."- -> ".$text);
+					$core->internal(" -".$cnick."- -> ".$text);
 				}
 			}
 			else {
-				$this->internal(" Unable to NOTICE. Not connected to IRC.");
+				$core->internal(" Unable to NOTICE. Not connected to IRC.");
 			}
 		}
 	}
 	public function action($channel = false,$text = false) {
-		global $log_irc, $colors, $sid, $cnick;
+		global $core,$log_irc, $colors, $sid, $cnick;
 		if (!$channel) {
-			$this->internal(" ERROR. Missing TEXT in function ACTION");
+			$core->internal(" ERROR. Missing TEXT in function ACTION");
 		}
 		else if (!$text) {
-			$this->internal(" ERROR. Missing TEXT in function ACTION");
+			$core->internal(" ERROR. Missing TEXT in function ACTION");
 		}
 		else {
 			if ($sid) {
 				fputs($sid,"PRIVMSG ".$channel." :ACTION ".$text."\n");
 				if ($log_irc) {
-					$this->internal($channel.": ".$colors->getColoredString("* ".$cnick." ".$text,"purple"));
+					$core->internal($channel.": ".$colors->getColoredString("* ".$cnick." ".$text,"purple"));
 				}
 			}
 			else {
-				$this->internal(" ERROR. You cannot send an ACTION to IRC when you're not connected!");
+				$core->internal(" ERROR. You cannot send an ACTION to IRC when you're not connected!");
 			}
 		}
 	}
 	public function quit($message = "Goodbye! For now!") {
-		global $sid;
+		global $core,$sid;
 		if ($sid) {
 			fputs($sid,"QUIT :".$message."\n");
 			fclose($sid);
@@ -164,27 +172,27 @@ class pitcapi {
 		die();
 	}
 	public function part($channel = false,$message = "Parting!") {
-		global $sid,$scrollback;
+		global $core,$sid,$scrollback;
 		if ($sid) {
 			fputs($sid,"PART ".$channel." :".$message."\n");
 		}
 		else {
-			$this->internal(" ERROR. Not connected to IRC! Cannot part.");
+			$core->internal(" ERROR. Not connected to IRC! Cannot part.");
 		}
 	}
 	public function join($channel = false) {
-		global $sid,$scrollback;
+		global $core,$sid,$scrollback;
 		if ($sid) {
 			fputs($sid,"JOIN ".$channel."\n");
 		}
 		else {
-			$this->internal(" ERROR. Not connected to IRC! Cannot join.");
+			$core->internal(" ERROR. Not connected to IRC! Cannot join.");
 		}
 	}
 	public function nick($nick = false) {
-		global $sid,$scrollback;
+		global $core,$sid,$scrollback;
 		if ($nick == false) {
-			$this->internal(" ERROR. Missing NICK in function NICK");
+			$core->internal(" ERROR. Missing NICK in function NICK");
 		}
 		else {
 			if ($sid) {
@@ -194,21 +202,21 @@ class pitcapi {
 		}
 	}
 	public function raw($text = false) {
-		global $sid,$scrollback;
+		global $core,$sid,$scrollback;
 		if ($sid) {
 			fputs($sid,$text."\n");
 		}
 		else {
-			$this->internal(" ERROR. Unable to send RAW Data, not connected to IRC!");
+			$core->internal(" ERROR. Unable to send RAW Data, not connected to IRC!");
 		}
 	}
 	public function mode($chan = false,$mode = false) {
-		global $sid,$scrollback;
+		global $core,$sid,$scrollback;
 		if (!$chan) {
-			$this->internal(" ERROR. Missing CHANNEL in function MODE");
+			$core->internal(" ERROR. Missing CHANNEL in function MODE");
 		}
 		else if (!$mode) {
-			$this->internal(" ERROR. Missing MODE(S) in function MODE");
+			$core->internal(" ERROR. Missing MODE(S) in function MODE");
 		}
 		else {
 			if ($chan[0] == "#") {
@@ -216,21 +224,21 @@ class pitcapi {
 					fputs($sid,"MODE {$chan} {$mode}\n");
 				}
 				else {
-					$this->internal(" ERROR. Unable to set MODE. Not connected to IRC.");
+					$core->internal(" ERROR. Unable to set MODE. Not connected to IRC.");
 				}
 			}
 			else {
-				$this->internal(" ERROR. Invalid CHANNEL in function MODE");
+				$core->internal(" ERROR. Invalid CHANNEL in function MODE");
 			}
 		}
 	}
 	public function ctcp($nick = false,$ctcp = false) {
-		global $sid,$scrollback;
+		global $core,$sid,$scrollback;
 		if (!$nick) {
-			$this->internal(" ERROR. Missing NICK in function CTCP");
+			$core->internal(" ERROR. Missing NICK in function CTCP");
 		}
 		else if (!$ctcp) {
-			$this->internal(" ERROR. Missing CTCP in function CTCP");
+			$core->internal(" ERROR. Missing CTCP in function CTCP");
 		}
 		else {
 			if ($sid) {
@@ -242,39 +250,39 @@ class pitcapi {
 		}
 	}
 	public function topic($chan = false,$text = false) {
-		global $sid,$scrollback;
+		global $core,$sid,$scrollback;
 		if (!$chan) {
-			$this->internal(" ERROR. Missing CHANNEL in function TOPIC");
+			$core->internal(" ERROR. Missing CHANNEL in function TOPIC");
 		}
 		else if (!$ctcp) {
-			$this->internal(" ERROR. Missing CHANNEL in function TOPIC");
+			$core->internal(" ERROR. Missing CHANNEL in function TOPIC");
 		}
 		else {
 			if ($sid) {
 				fputs($sid,"TOPIC {$chan} :{$text}\n");
 			}
 			else {
-				$this->internal(" ERROR. Unable to set TOPIC in {$chan}. Not connected to IRC.");
+				$core->internal(" ERROR. Unable to set TOPIC in {$chan}. Not connected to IRC.");
 			}
 		}
 	}
 	public function ctcpreply($nick = false,$ctcp = false,$text = false) {
-		global $sid,$scrollback;
+		global $core,$sid,$scrollback;
 		if (!$nick) {
-			$this->internal(" ERROR. Missing NICK in function CTCPREPLY");
+			$core->internal(" ERROR. Missing NICK in function CTCPREPLY");
 		}
 		else if (!$ctcp) {
-			$this->internal(" ERROR. Missing CTCP in function CTCPREPLY");
+			$core->internal(" ERROR. Missing CTCP in function CTCPREPLY");
 		}
 		else if (!$text) {
-			$this->internal(" ERROR. Missing TEXT in function CTCPREPLY");
+			$core->internal(" ERROR. Missing TEXT in function CTCPREPLY");
 		}
 		else {
 			if ($sid) {
 				ctcpreply($nick,$ctcp,$text);
 			}
 			else {
-				$this->internal(" ERROR. Unable to CTCPREPLY. Not connected to IRC.");
+				$core->internal(" ERROR. Unable to CTCPREPLY. Not connected to IRC.");
 			}
 		}
 	}
@@ -303,15 +311,10 @@ class pitcapi {
 	public function italic($text) {
 		return "".$text."";
 	}
-	private internal($text) {
-		global $rawlog;
-		$rawlog[] = $text;
-		echo $text."\n";
-	}
 }
 class channel {
 	public function topic($chan) {
-		global $chan_topic;
+		global $core,$chan_topic;
 		$chan = getWid($chan);
 		if ($chan) {
 			if (isset($chan_topic[$chan])) {
@@ -326,7 +329,7 @@ class channel {
 		}
 	}
 	public function modes($chan) {
-		global $chan_modes;
+		global $core,$chan_modes;
 		$chan = getWid($chan);
 		if ($chan) {
 			if (isset($chan_modes[$chan])) {
@@ -341,7 +344,7 @@ class channel {
 		}
 	}
 	public function users($chan) {
-		global $userlist;
+		global $core,$userlist;
 		$chan = getWid($chan);
 		if ($chan) {
 			if (isset($userlist[$chan])) {
@@ -356,7 +359,7 @@ class channel {
 		}
 	}
 	public function ison($user,$chan = false) {
-		global $userlist,$active,$api;
+		global $core,$userlist,$active,$api;
 		/* Derived from GetPrefix() */
 		/* Used in the core, dont remove or edit! */
 		if ($chan == FALSE) { $wid = $active; } else { $wid = getwid($chan); }
@@ -381,13 +384,13 @@ class channel {
 }
 class timer {
 	public function addtimer($delay = false,$rep = false,$function = false ,$args = false) {
-		global $timers,$scrollback;
+		global $core,$timers,$scrollback;
 		if ($delay == false | $function == false) {
 			if (!$delay) {
-				$this->internal(" ERROR. Missing DELAY in function TIMER->ADDTIMER");
+				$core->internal(" ERROR. Missing DELAY in function TIMER->ADDTIMER");
 			}
 			else {
-				$this->internal(" ERROR. Missing FUNCTION in function TIMER->ADDTIMER");
+				$core->internal(" ERROR. Missing FUNCTION in function TIMER->ADDTIMER");
 			}
 			return false;
 		}
@@ -399,31 +402,31 @@ class timer {
 			$dat['args'] = $args;
 			$dat['next'] = $this->calcnext($delay);
 			$timers[] = $dat;
-			$this->internal(" Added Timer with delay {$delay}");
+			$core->internal(" Added Timer with delay {$delay}");
 			end($timers); 
 			return $timers[key($timers)]; 
 		}
 	}
 	public function deltimer($id) {
 		// Deletes a timer with the specified ID.
-		global $timers;
+		global $core,$timers;
 		if (!$id) {
-			$this->internal(" ERROR. Missing ID in function TIMER->DELTIMER");
+			$core->internal(" ERROR. Missing ID in function TIMER->DELTIMER");
 		}
 		else {
 			if (isset($timers[$id])) {
 				unset($timers[$id]);
-				$this->internal(" Timer {$id} Removed.");
+				$core->internal(" Timer {$id} Removed.");
 				return true;
 			}
 			else {
-				$this->internal(" Timer {$id} not found!");
+				$core->internal(" Timer {$id} not found!");
 				return false;
 			}
 		}
 	}
 	public function checktimers() {
-		global $timers;
+		global $core,$timers;
 		foreach ($timers as $id => $tmr) {
 			if ($tmr['next'] == time()) {
 				// Trigger timer.
@@ -435,7 +438,7 @@ class timer {
 					$timers[$id]['rep']--;
 					if ($timers[$id]['rep'] == 0) {
 						// Remove - Actually a Debug Line I never removed but in this case Its good.
-						$this->internal(" Unset timer {$id} running funct '{$tmr['function']}'");
+						$core->internal(" Unset timer {$id} running funct '{$tmr['function']}'");
 						unset($timers[$id]);
 					}
 				}
@@ -443,10 +446,10 @@ class timer {
 		}
 	}
 	public function texttosec($text) {
-		global $scrollback;
+		global $core,$scrollback;
 		// Returns the contents of $text in seconds, e.g. 1m = 60 Seconds
 		if (!$text) {
-			$this->internal(" ERROR. Missing TEXT in function TIMER->TEXTOSEC");
+			$core->internal(" ERROR. Missing TEXT in function TIMER->TEXTOSEC");
 		}
 		else {
 		if (is_numeric($text)) {
