@@ -1,7 +1,7 @@
 <?php
 /*
 	#############################
-	# PITC IRC TERMINAL CLIENT  #
+	#   PITC IRC BOT FRAMEWORK  #
 	#    By Thomas Edwards      #
 	#  COPYRIGHT TMFKSOFT 2012  #
 	#############################
@@ -28,13 +28,8 @@ declare(ticks = 1);
 stream_set_blocking(STDIN, 0);
 stream_set_blocking(STDOUT, 0);
 set_error_handler("pitcError");
+$log_irc = true; // Log IRC to the main window as well?
 $start_stamp = time();
-$buffer = "";
-$buffpos = 0;
-$curshow = 0;
-$cmd = "";
-$text = "";
-$previous = "";
 $rawlog = array();
 $ctcps = array();
 $error_log = array();
