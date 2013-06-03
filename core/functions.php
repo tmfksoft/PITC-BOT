@@ -1,152 +1,5 @@
 <?php
 // ADDED [WIP] in comments above buggy code.
-function drawWindow($window,$input = true,$return = false) {
-	// Lets draw the contents of the window... Fun
-	global $windows,$scrollback,$text,$colors,$sid,$_CONFIG,$cnick,$buffer,$buffpos,$curshow,$userlist,$chan_modes,$chan_topic;
-	
-	if (!isset($windows[$window])) {
-		var_dump($windows);
-		shutdown("Script supplied invalid window ID\n");
-	}
-	if (!isset($scrollback[$window])) {
-		var_dump($scrollback);
-		shutdown("[drawWindow] Script supplied invalid (scrollback) for window ".$window." @ Line ".__LINE__."\n");
-	}
-	
-	$data = chr(12)."\n";
-	if (strtoupper(substr(PHP_OS, 0, 3)) != 'WIN') {
-		$shell_cols = exec('tput cols');
-		$shell_rows = exec('tput lines');
-	}
-	else {
-		$shell_cols = "80";
-		$shell_rows = "24";
-	}
-	// Cater for overspill!
-	$x = 0;
-	$spill = 0;
-	while ($x != count($scrollback[$window])) {
-		if (strlen($scrollback[$window][$x]) > $shell_cols-1) {
-			$spill++;
-		}
-		$x++;
-	}
-	
-	// Top Bar.
-	if ($windows[$window][0] == "#") {
-	
-		// Channel.
-		$ucount = count($userlist[$window]);
-		if (isset($chan_modes[$window])) {
-			$modes = $chan_modes[$window];
-		}
-		else {
-			$modes = "(N/A)";
-		}
-		if (isset($chan_topic[$window])) {
-			$topic = format_text($chan_topic[$window]);
-		}
-		else {
-			$topic = " No Topic to Display! ";
-		}
-		// Sammich, Left and right data. Makes the maths and such easier.
-		$l = "= PITC - ".$windows[$window]." [{$ucount}] [{$modes}: ";
-		$r = " ] =";
-		$max = $shell_cols - (strlen($l)+strlen($r))-3; // MAX Length of the topic string, take 3 for the ...
-		if (strlen($topic) > $max) {
-			// Topic is tooooooo long, lets chop.
-			$topic = substr($topic,0,$max);
-			$tbar = $l.$topic."...".$r;
-			// Should be correct sized.
-		}
-		else {
-			$tbar = $l.$topic.$r; // Slap it together.
-			// Calc if we need to add some padding.
-			if (strlen($tbar) < $shell_cols) {
-				// We need padding,
-				$pad = $shell_cols - strlen($tbar);
-				$tbar .= str_repeat("=",$pad);
-				// Done
-			}
-			// All should be done and it should be nice and padded up.
-		}
-		
-	}
-	else {
-		$tbar= "= PITC - ".$windows[$window]." ";
-		$equals = $shell_cols - strlen($tbar);
-		$tbar .= str_repeat("=",$equals);
-	}
-	
-	$data .= $tbar; // Add topic bar.
-	$empty = $shell_rows-3; // Amount of lines to fill with Scrollback or \n
-	$scroll = count($scrollback[$window]); // Amount of lines in scrollback.
-	
-	if ($scroll < $empty) {
-		$ns = $empty-$scroll+1; // Amount of \n's to show.
-		$data .= str_repeat("\n",$ns);
-	}
-	if ($input == false) {
-		$data .= "\n";
-	}
-	// Now to show the amount of SCROLLBACK lines we need.
-	// First determine how many CAN be shown.
-	if ($scroll < $empty) {
-		$showable = $empty-($empty-$scroll); // If I do my maths right thats how many are left.
-	}
-	else {
-		$showable = $empty; // Fill all avaliable lines.
-	}
-	$showable - $spill;
-	$x = 0;
-	$text = $scrollback[$window];
-	while ($x != $showable) {
-		$line = $scroll - $showable + $x;
-		$line = $text[$line];
-		$a = 0;
-		$a_text = "";
-		while ($a < strlen($line)) {
-			$a_text .= $line[$a];
-			$a++;
-		}
-		$data .= $a_text."\n";
-		$x++;
-	}
-	if ($input == true) {
-		$extra = "= [".$window.":".$windows[$window]."] ";
-		$extra .= str_repeat("=",$shell_cols-strlen($extra));
-		$data .= $extra;
-		
-		$left = substr($buffer, 0, $buffpos);
-		$right = substr($buffer, $buffpos);
-		
-		if (isset($sid)) {
-			if ($cnick != "") {
-				$data .= "\n(".$cnick."): {$left}|{$right}";
-			}
-			else {
-				$data .= "\n(".$_CONFIG['nick']."): {$left}|{$right}";
-			}
-		}
-		else {
-			$data .= "\n> {$left}|{$right}";
-		}
-	}
-	else {
-		// We don't care about input.
-		$data .= str_repeat("=",$shell_cols);
-	}
-	if ($return) {
-		return $data;
-	}
-	else {
-		echo $data;
-	}
-}
-
-function draw_display() {
-
-}
 
 function text_split($in) {
 	$len = count($in);
@@ -168,6 +21,7 @@ function shutdown($message = "Shutdown") {
 function connect($nick,$address,$port,$ssl = false,$password = false) {
 	global $_CONFIG,$domain,$sasl,$api;
 	if ($ssl) { $address = "ssl://".$address; }
+	echo "\n\n ## Connecting to {$address} on port {$port} ## \n\n";
 	$fp = @fsockopen($address,$port, $errno, $errstr, 5);
 	if ($fp) {
 		if (isset($_CONFIG['sasl'])) {
@@ -185,7 +39,7 @@ function connect($nick,$address,$port,$ssl = false,$password = false) {
 	}
 }
 function parse($rid) {
-	global $scrollback,$active,$_CONFIG,$cnick,$rawlog;
+	global $core,$active,$_CONFIG,$cnick,$rawlog;
 	//echo "Handling bot with RID ".$rid."\n";
 	if ($data = fgets($rid)) {
 		$data = trim($data);
@@ -196,7 +50,7 @@ function parse($rid) {
 			pitc_raw("PONG ".$ex[1]);
 		}
 		else if ($ex[1] == "001") {
-			$scrollback['0'][] = " = Connected to IRC! =";
+			$core->internal(" = Connected to IRC! =");
 			// Ajoin!
 			if (isset($_CONFIG['ajoin'])) {
 				$chans = explode(" ",$_CONFIG['ajoin']);
@@ -214,7 +68,7 @@ function parse($rid) {
 		}
 		else if ($ex[1] == "433") {
 			// Nick in use.
-			$scrollback['0'][] = " = Nick in use. Changing to alternate nick! =";
+			$core->internal(" = Nick in use. Changing to alternate nick! =");
 			$cnick = $_CONFIG['altnick'];
 			pitc_raw("NICK :".$cnick);
 		}
@@ -229,18 +83,18 @@ function pitc_raw($text,$sock = false) {
 	return fputs($fp,"{$text}\n");
 }
 function load_script($file) {
-	global $scrollback;
+	global $core;
 	if (file_exists($file)) {
 		$res = include($file);
 		if ($res) {
-			$scrollback['0'][] = " = Loaded script '".$file."' = ";
+			$core->internal(" = Loaded script '".$file."' = ");
 		}
 		else {
-			$scrollback['0'][] = " = Error loading script '".$file."' = - ".$res;
+			$core->internal(" = Error loading script '".$file."' = - ".$res);
 		}
 	}
 	else {
-		$scrollback['0'][] = " = Error loading script '".$file."' = - File does not exist.";
+		$core->internal(" = Error loading script '".$file."' = - File does not exist.");
 	}
 }
 function getWid($name) {

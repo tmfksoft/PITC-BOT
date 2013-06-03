@@ -93,7 +93,6 @@ if (!file_exists($_SERVER['PWD']."/core/config.cfg")) {
 	run_config();
 	sleep(1);
 	stream_set_blocking(STDIN, 0);
-	drawwindow(0);
 }
 
 // Load the config and language pack.
@@ -119,11 +118,14 @@ else {
 
 
 // Variable Inits - LEAVE THEM ALONE!
+
+// Windows and $scrollback are no longer used, Kept in for now.
 $active = "strt"; // Current window being viewed.
-$windows = array("strt"=>"PITC starting up",0=>$lng['STATUS']);
-$scrollback['strt'] = array();
+$windows = array();
 $scrollback['0'] = array(" = {$lng['STATUS']} {$lng['WINDOW']}. =");
 $text = "";
+
+// Channel Stuff.
 $chan_modes = array();
 $chan_topic = array();
 
@@ -134,31 +136,8 @@ else {
 	shutdown("{$lng['MSNG_API']}\n");
 }
 
-// ASCII Feature?!
-if (file_exists($_SERVER['PWD']."/core/ascii.php")) {
-	include($_SERVER['PWD']."/core/ascii.php");
-}
-// DNS issue. quick fix for now.
-if (!is_connected()) {
-	$text = ascii_read_file($_SERVER['PWD']."/core/pitc_ascii");
-	$error_log[] = "[ASCII] No internet connection, loading local file.";
-}
-else {
-	$text = ascii_read_file("http://pitc.x10.mx/ascii/");
-	$error_log[] = "[ASCII] Internet, Loading remote data.";
-}
-ascii_display($text,"strt");
+// ASCI is no longer in PITCBots.
 
-$textlns = count($text);
-$void = ($shell_rows - $textlns) / 2;
-
-for ($i=0;$i<$void;$i++) { $scrollback['strt'][] = ""; }
-
-
-drawWindow($active,false);
-sleep(2);
-unset($scrollback['strt'],$windows['strt']);
-$active = "0";
 
 // Scripting interface/api
 $api_commands = array();
@@ -188,668 +167,63 @@ while ($x != count($api_start)) {
 	$x++;
 }
 
-$scrollback['0'][] = " = {$lng['CHECKING_LATEST']} =";
-drawWindow(0,false);
-sleep(1);
-if (is_connected()) {
-	$latest = @file_get_contents("http://pitc.x10.mx/update/?action=latest");
+// Init our API's
+$api = new pitcapi();
+$chan_api = new channel();
+$timer = new timer();
+
+// Load any core scripts.
+include("colours.php");
+$colors = new Colors(); // Part of Colours Script
+
+// Load auto scripts.
+if (file_exists($_SERVER['PWD']."/scripts/autoload")) {
+	$scripts = explode("\n",file_get_contents($_SERVER['PWD']."/scripts/autoload"));
+	for ($x=0;$x != count($scripts);$x++) {
+		if ($scripts[$x][0] != ";") {
+			$script = $_SERVER['PWD']."/scripts/".trim($scripts[$x]);
+			if (file_exists($script)) {
+				include_once($script);
+				$loaded[] = $script;
+			}
+			else {
+				$core->internal(" = {$lng['AUTO_ERROR']} '{$scripts[$x]}' {$lng['NOSUCHFILE']} =");
+			}
+		}
+	}
+	//unset($scripts);
+}
+if ($_SERVER['TERM'] == "screen") {
+	$core->internal(" = {$lng['SCREEN']} =");
+}
+$ann = data_get("http://announcements.pitc.x10.mx/");
+if ($ann->message != "none") { $core->internal(" ".$ann->message); }
+
+// Connect!
+$core->internal(" = {$lng['CONN_DEF']} (".$_CONFIG['address'].") =");
+$address = $_CONFIG['address'];
+$_PITC['address'] = $address;
+
+$address = explode(":",$address);
+if (isset($address[1]) && is_numeric($address[1])) { $port = $address[1]; }
+else { $port = 6667; }
+if (isset($text[2])) { $password = $text[2]; } else { if (isset($_CONFIG['password'])) { $password = $_CONFIG['password']; } else { $password = false; } }
+$ssl = false;
+if ($port[0] == "+") { $ssl = true; }
+$sid = connect($_CONFIG['nick'],$address[0],$port,$ssl,$password);
+if (!$sid) {
+	$core->internal(" = {$lng['CONN_ERROR']} =");
+	unset($sid);
 }
 else {
-	$latest = false;
-	$scrollback['0'][] = "PITC requires an internet connection to check for updates. Aborting check.";
+	stream_set_blocking($sid, 0);
 }
-if ($latest != false && $latest > $version) {
-	$scrollback['0'][] = " = {$lng['NEWER']} =";
-	drawWindow(0,false);
-	$scrollback['0'][] = " = {$lng['RUNUPDATE']}";
-	drawWindow(0);
-	sleep(1);
-}
-	// Init our API's
-	$api = new pitcapi();
-	$chan_api = new channel();
-	$timer = new timer();
-	// Load any core scripts.
-	include("colours.php");
-	$colors = new Colors(); // Part of Colours Script
-	// Load auto scripts.
-	if (file_exists($_SERVER['PWD']."/scripts/autoload")) {
-		$scripts = explode("\n",file_get_contents($_SERVER['PWD']."/scripts/autoload"));
-		for ($x=0;$x != count($scripts);$x++) {
-			if ($scripts[$x][0] != ";") {
-				$script = $_SERVER['PWD']."/scripts/".trim($scripts[$x]);
-				if (file_exists($script)) {
-					include_once($script);
-					$loaded[] = $script;
-				}
-				else {
-					$scrollback[0][] = " = {$lng['AUTO_ERROR']} '{$scripts[$x]}' {$lng['NOSUCHFILE']} =";
-				}
-				drawWindow($active);
-			}
-		}
-		//unset($scripts);
-	}
-	drawWindow($active);
-	if ($_SERVER['TERM'] == "screen") {
-		$scrollback[0][] = " = {$lng['SCREEN']} =";
-		drawWindow($active);
-	}
-	$ann = data_get("http://announcements.pitc.x10.mx/");
-	if ($ann->message != "none") { $scrollback[0][] = " ".$ann->message; }
+
 while (1) {
-
-	if (strtoupper(substr(PHP_OS, 0, 3)) != 'WIN') {
-		// Update screensize.
-		$shell_cols = exec('tput cols');
-		$shell_rows = exec('tput lines');
-	}
-	if (isset($windows[$active])) {
-		drawWindow($active);
-	}
-	$x = 0;
-	while ($x != count($api_tick)) {
-		$args = array(); // Empty for now
-		call_user_func($api_tick[$x],$args);
-		$x++;
-	}
-	if ($_SERVER['TERM'] == "screen" && isset($_SERVER['STY'])) {
-		$screen_d = shell_exec("screen -ls");
-		$screen_d = explode("\n",$screen_d);
-		$x = 0;
-		while ($x != count($screen_d)) {
-			$data = explode(" ",$screen_d[$x]);
-			if ($data[0] == $_SERVER['STY']) {
-				if ($data[2] == "(Detached)") {
-					if (isset($_CONFIG['screen_away']) && $_CONFIG['screen_away'] == "true") {
-						if (isset($sid)) {
-							pitc_raw("NICK :".$cnick."[Away]");
-							pitc_raw("AWAY :{$lng['SCREEN_D_1']}");
-							$scrollback[0][] = " = {$lngp['SCREEN_D_2']} =";
-						}
-					}
-				}
-			}
-			$x++;
-		}
-	}
-	$in = fgets(STDIN);
-
-	if ($in != "" && ord($in) > 31 && ord($in) != 127) {
-		$text = "";
-		$cmd = "";
-		
-		$left = substr($buffer, 0, $buffpos);
-		$right = substr($buffer, $buffpos);
-		$buffpos++;
-		$buffer = $left.$in[0].$right;
-	}
-	else if (ord($in) == 27) {
-		if ($in[2] == "D") {
-			// Pressed Left.
-			if ($buffpos > 0) { $buffpos--; }
-		}
-		else if ($in[2] == "B") {
-			// Pressed Down
-			$buffer = "";
-			$buffpos = 0;
-		}
-		else if ($in[2] == "C") {
-			// Pressed Right.
-			if ($buffpos < strlen($buffer)) { $buffpos++; }
-		}
-		else if ($in[2] == "A") {
-			// Pressed Up.
-			$buffer = $previous;
-			$buffpos = strlen($buffer);
-		}
-		else if ($in[2] == 5) {
-			// Page Up.
-			$scrollback[$active][] = " = Page UP =";
-		}
-		else if ($in[2] == 6) {
-			// Page down
-			$scrollback[$active][] = " = Page Down =";
-		}
-	}
-	else if (ord($in) == 9) {
-		// Check if we're tab completing or not.
-		if (substr($buffer,0,-1) != " ") {
-			// Tab complete
-			if ($active != "0") {
-				// Tab :3
-				// Check if we should be checking.
-				if ($buffer != "" && $buffer != " ") {
-					$full = nick_tab($userlist[$active],$buffer);
-				}
-				else {
-					$full = FALSE; // Aborts it anyway.
-				}
-				if ($full != FALSE) {
-					$buff = explode(" ",$buffer);
-					$items = count($buff);
-					$scrollback[$active][] = " I found {$items} words.";
-					if ($items > 1) {
-						unset($buff[count($buff)-1]);
-						$buff[] = $full;
-						$buffer = implode(" ",$buff);
-					}
-					else {
-						$buffer = $full;
-					}
-					$buffpos = strlen($buffer);
-				}
-			}
-			else { $buffer .= "	"; }
-		}
-		else {
-			$buffer .= "	";
-		}
-	}
-	else if (ord($in) == 127) {
-		// Backspace.
-		$left = substr($buffer, 0, $buffpos);
-		$right = substr($buffer, $buffpos);
-		$buffer = substr($left,0,-1).$right;
-		$buffpos--;
-	}
-	else if (ord($in) == 10) {
-		$text = explode(" ",$buffer);
-		$cmd = strtolower($text[0]);
-		$previous = $buffer;
-		$buffer = "";
-		$buffpos = 0;
-	}
-	// anything not recognised.
-	else if (ord($in) < 31 && ord($in) != 0) {
-		$buffer .= ord($in);
-	}
-	else {
-		$text = "";
-		$cmd = "";
-	}
-	if (ord($in) != 0) {
-		$keybuff_arr[] = ord($in);
-	}
-	// Command Checking
-	if ($cmd == "/quit") {
-		if (isset($sid)) {
-			$scrollback[$active][] = "Quitting!";
-			if (isset($text[1])) {
-				$qmsg = array_slice($text,1);
-				$qmsg = implode(" ",$qmsg);
-				pitc_raw("QUIT :".$qmsg);
-			}
-			else {
-				if (isset($_CONFIG['quit'])) {
-					pitc_raw("QUIT :{$_CONFIG['quit']}");
-				}
-				else {
-					pitc_raw("QUIT :{$lng['DEF_QUIT']}");
-				}
-			}
-			$scrollback = array($scrollback['0']);
-			$windows = array("Status");
-			$scrollback['0'][] = " = {$lng['DISCONNECTED']} {$lng['RECONNECT_TO']} ".$_PITC['address']." =";
-			$cnick = $_CONFIG['nick'];
-			$active = 0;
-			fclose($sid);
-			unset($sid);
-			$_PITC['address'] = false;
-		}
-		else {
-			$scrollback['0'][] = " = {$lng['NOT_CONN']} =";
-		}
-	}
-	else if ($cmd == "/version") {
-		$scrollback['0'][] = " = You are running PITC v".$version." =";
-	}
-	else if ($cmd == "/refresh") {
-		if (isset($text[1])) {
-			if (is_numeric($text[1])) {
-				$refresh = $text[1];
-				$scrollback['0'][] = " = Refresh speed altered to {$refresh}ms =";
-			}
-			else {
-				$scrollback['0'][] = " = The refresh speed CANNOT be set to a letter! =";
-			}
-		}
-		else {
-				$scrollback['0'][] = " = Refresh speed is currently {$refresh}ms =";
-		}
-	}
-	else if ($cmd == "/update") {
-		if ($sid) {
-			$scrollback[0][] = " = You are connected to IRC. Disconnect first! =";
-		}
-		else {
-			update(true);
-			shutdown("Please start PITC.");
-		}
-	}
-	else if ($cmd == "/exit") {
-		if (isset($sid)) {
-			if (isset($_CONFIG['quit'])) {
-				pitc_raw("QUIT :{$_CONFIG['quit']}");
-			}
-			else {
-				pitc_raw("QUIT :{$lng['DEF_QUIT']}");
-			}
-		}
-		shutdown("\nThanks for using PITC!\n");
-	}
-	else if ($cmd == "^[^[[C") {
-		$scrollback[$active][] = $lng['NO_OPEN'];
-	}
-	else if ($cmd == "^[[A") {
-		$scrollback[$active][] = "Last command";
-	}
-	else if ($cmd == "/settings") {
-		$scrollback[$active][] = " Your current configuration is as follows:";
-		foreach ($_CONFIG as $directive => $setting) {
-			$scrollback[$active][] = "    {$directive} = {$setting}";
-		}
-	}
-	else if ($cmd == "/nick") {
-		if (isset($text[1])) {
-			if (!isset($sid)) {
-				$_CONFIG['nick'] = $text[1];
-				$cnick = $_CONFIG['nick'];
-				$scrollback['0'][] = " = Nick {$lng['CHANGED']} ".$text[1]." =";
-			}
-			else {
-				pitc_raw("NICK :".$text[1]);
-			}
-		}
-		else {
-			$scrollback[$active][] = "{$lng['USAGE']}: /nick NICK";
-		}
-	}
-	else if ($cmd == "/clear") {
-		// Clear Active Scrollback
-		$scrollback[$active] = array();
-	}
-	else if ($cmd == "/load") {
-		// Clear Active Scrollback
-		if (isset($text[1])) {
-			// Check for file
-			if (file_exists($_SERVER['PWD']."/".$text[1])) {
-				include_once($_SERVER['PWD']."/".$text[1]);
-				$loaded[] = $_SERVER['PWD']."/".$text[1];
-				// We trust the script will do a log to say its loaded.
-				drawWindow($active);
-			}
-			else {
-				$scrollback[$active][] = " {$lng['ERROR_SCRIPT']}";
-			}
-		}
-		else {
-			$scrollback[$active][] = " {$lng['USAGE']}: /load file";
-		}
-	}
-	else if ($cmd == "/loaded") {
-		$scrollback[$active][] = " - Currently loaded scripts:";
-		foreach ($loaded as $script) {
-			$scrollback[$active][] = "   - ".$script;
-		}
-	}
-	else if ($cmd == "/bell") {
-		// Clear Active Scrollback
-		ringBell();
-		drawWindow($active);
-	}
-	else if ($cmd == "/donk") {
-		$scrollback[$active][] = " = DONK! = ";
-	}
-	else if ($cmd == "/eval") {
-		$code = implode(" ",array_slice($text, 1));
-		ob_start();
-		@eval("?>".$code."<?");
-		$ret = ob_get_clean();
-		$ret = explode("\n",$ret);
-		foreach ($ret as $message) {
-			$scrollback[$active][] = " [PHP] ".$message;
-		}
-		unset($code);
-		unset($ret);
-		unset($eval);
-	}
-	else if ($cmd == "/lang") {
-		$language = strtolower($text[1]);
-		if (file_exists("langs/".$language.".lng")) {
-			$lng = array();
-			eval(file_get_contents("langs/".$language.".lng"));
-			$scrollback[$active][] = "Loaded ".strtoupper($language)." - Prelogged data CANNOT be changed!";
-			drawWindow($active);
-		}
-		else {
-			$scrollback[$active][] = "ERROR Loading Language File!";
-		}
-	}
-	else if ($cmd == "/dump") {
-		$fname = "dumps/".time()."_dump";
-		$scrollback[$active][] = " # {$lng['MEM_DMPG']} ".$fname.". #";
-		$vars = print_r(get_defined_vars(),true);
-		if (!file_exists("dumps") && !is_dir("dumps")) {
-			mkdir("dumps");
-		}
-		file_put_contents($fname,$vars);
-		if (file_exists($fname)) {
-			$scrollback[$active][] = " # {$lng['MEM_DUMPED']} ".$fname.". #";
-		}
-		else {
-			$scrollback[$active][] = " # {$lng['MEM_ERROR']} ".$fname.". #";
-		}
-	}
-	else if ($cmd == "/bugreport") {
-		// Mails a memory dump to bugs@pitc.x10.mx
-		$data = "CORE VARS: \n\n".base64_encode(print_r(get_defined_vars(),true));
-		foreach ($loaded as $script) {
-			$data .= "\n $script\n\n".base64_encode(file_get_contents($script));
-		}
-		$username = $_SERVER['user'];
-		$host = gethostname();
-		mail('bugs@pitc.x10.mx', 'Automated MEMDUMP '.time(), $data,"From: {$username}@{$host}");
-		unset($data);
-		$scrollback[$active][] = " = Performed bug report =";
-	}
-	else if ($cmd == "/view") {
-		if (isset($text[1])) {
-			// String or number?
-			if (is_numeric($text[1])) {
-				$id = $text[1];
-					}
-			else {
-				$id = getWid($text[1]);
-			}
-			if (isset($windows[$id])) {
-				// View window.
-				if ($id == $active) {
-					$scrollback[$active][] = $colors->getColoredString("{$lng['VIEW_ALREADY']} ".$windows[$id], "red");
-				}
-				else {
-					$active = $id;
-					$scrollback[$active][] = $colors->getColoredString("{$lng['VIEWING']} ".$windows[$id], "red");
-				}
-			}
-			else {
-				$scrollback[$active][] = $colors->getColoredString("{$lng['VIEW_NO']}", "red");
-			}
-		}
-		else {
-			$scrollback[$active][] = $colors->getColoredString("{$lng['USAGE']}: /view ID/Name", "red");
-		}
-	}
-	// End /view
-	else if ($cmd == "/windows") {
-		end($windows);
-		$amount = key($windows);
-		$amount++;
-		//$amount = count($windows);
-		$scrollback[$active][] = "{$lng['WINDOWS_1']} ".$amount." {$lng['WINDOWS_2']}";
-		$x = 0;
-		while ($x != $amount) {
-			if (isset($windows[$x])) {
-				if ($x == $active) {
-					$scrollback[$active][] = "\t".$x." - ".$windows[$x]." ({$lng['VIEWING']}) ";
-				}
-				else {
-					$scrollback[$active][] = "\t".$x." - ".$windows[$x];
-				}
-			}
-			$x ++;
-		}
-		$scrollback[$active][] = "{$lng['WINDOWS_3']} ".$active.":".$windows[$active];
-	}
-	else if ($cmd == "/config") {
-		if (isset($sid)) {
-			$scrollback[$active][] = " = {$lng['NO_CONFIG']} =";
-		}
-		else {
-			stream_set_blocking(STDIN,1);
-			run_config();
-			unset($scrollback[1],$windows[1]);
-			$active = 0;
-			stream_set_blocking(STDIN,0);
-			$_CONFIG = load_config();
-		}
-	}
-	else if ($cmd == "/ulist") {
-		$users = $userlist[$active];
-		$scrollback[$active][] = " = There are ".count($users)." users in this channel. =";
-		foreach ($users as $user) {
-			$scrollback[$active][] = "\t{$user}";
-		}
-		$scrollback[$active][] = " = End /ulist =";
-	}
-	else if ($cmd == "/close" || $cmd == "/part") {
-		// Close active window
-		if ($active != "0") {
-			// Close window
-			if (isset($text[1])) {
-				if (is_numeric($text[1])) {
-					$win = $text[1];
-				}
-				else {
-					$win = getWid($text[1]);
-				}
-			}
-			else {
-				$win = $active;
-			}
-			$windowname = $windows[$win];
-			if ($windowname[0] == "#") {
-				// Tell the IRCD we're parting.
-				pitc_raw("PART ".$windowname." :{$lng['PARTING']}!");
-			}
-			unset($windows[$win], $scrollback[$win],$userlist[$win]);
-			array_values($windows);
-			$active = count($windows)-1;
-		}
-		else {
-			$scrollback[$active][] = "{$lng['STATUS_NO']}";
-			$scrollback[$active][] = "{$lngp['USE_EXIT']}";
-		}
-		
-	}
-	else if ($cmd == "/connect" || $autoconnect == true) {
-		if ($autoconnect) {
-			$scrollback[$active][] = " = {$lng['AUTO_CONN']} =";
-			$autoconnect = false;
-		}
-		if (!isset($text[1])) {
-			$scrollback[$active][] = " = {$lng['CONN_DEF']} (".$_CONFIG['address'].") =";
-			$address = $_CONFIG['address'];
-		}
-		else {
-			$scrollback[$active][] = " = {$lng['CONN_TO']} ".$text[1];
-			$address = $text[1];
-		}
-		drawWindow(0,false);
-		$_PITC['address'] = $address;
-		$address = explode(":",$address);
-		if (isset($address[1]) && is_numeric($address[1])) { $port = $address[1]; }
-		else { $port = 6667; }
-		if (isset($text[2])) { $password = $text[2]; } else { if (isset($_CONFIG['password'])) { $password = $_CONFIG['password']; } else { $password = false; } }
-		$ssl = false;
-		if ($port[0] == "+") { $ssl = true; }
-		$sid = connect($_CONFIG['nick'],$address[0],$port,$ssl,$password);
-		if (!$sid) {
-			$scrollback[$active][] = " = {$lng['CONN_ERROR']} =";
-			unset($sid);
-		}
-		else {
-			stream_set_blocking($sid, 0);
-		}
-	}
-	else if ($cmd == "") {
-	// Do nothing
-	}
-	else {
-		if (isset($sid)) {
-			$entered = implode(" ",$text);
-			$params = $text;
-			unset($params[0]);
-			if ($cmd[0] == "/") {
-				// PERFORMABLE COMMANDS WHILE CONNECTED!
-				$tentered = substr($entered,1);
-				// Entered a command :D
-				$command = substr($cmd,1);
-				if ($command == "me") {
-					if ($active == "0") {
-						$scrollback[$active][] = $colors->getColoredString(" {$lng['STATUS_TLK']}", "red");
-					}
-					else {
-						$action = $text;
-						unset($action[0]);
-						$action = implode(" ",$action);
-						pitc_raw("PRIVMSG ".$windows[$active]." :ACTION ".$action."");
-						if ($windows[$active][0] == "#") {
-							$mynick = get_prefix($cnick,$userlist[getWid($active)]);
-						}
-						else {
-							$mynick = $cnick;
-						}
-						$scrollback[$active][] = $colors->getColoredString("* ".$mynick." ".$action,"purple");
-					}
-				}
-				else if ($command == "join") {
-					$chans = implode(" ",$params);
-					pitc_raw("JOIN :".$chans);
-				}
-				else if ($command == "raw" || $command == "/raw") {
-					$message = array_slice($text, 2);
-					$message = implode(" ",$message);
-					fputs($sid,$message."\n");
-				}
-				else if ($command == "ctcp") {
-					if (!isset($params[1]) || !isset($params[2])) {
-						$scrollback[$active][] = " {$lng['USAGE']}: /ctcp nick ctcp";
-					}
-					else {
-						$scrollback[0][] = $colors->getColoredString(" -> [".$params[1]."] ".strtoupper($params[2]), "light_red");
-						ctcp($params[1],strtoupper($params[2]));
-					}
-				}
-				else if ($command == "msg") {
-					// Send a message!
-					if (!isset($text[1]) || !isset($text[2])) {
-						$scrollback[$active][] = " {$lng['USAGE']}: /msg Nick/#Channel Message";
-					}
-					else {
-						$target = $text[1];
-						$message = array_slice($text, 2);
-						$message = implode(" ",$message);
-						fputs($sid,"PRIVMSG ".$target." :".$message."\n");
-						$scrollback[$active][] = $target." -> ".$message;
-					}
-				}
-				else if ($command == "amsg") {
-					// Send a message!
-					if (!isset($text[1])) {
-						$scrollback[$active][] = " {$lng['USAGE']}: /amsg Message";
-					}
-					else {
-						$message = array_slice($text, 1);
-						$message = implode(" ",$message);
-						$x = 0;
-						while ($x != key($windows)) {
-							if (isset($windows[$x])) {
-								if ($windows[$x][0] == "#") {									
-									pitc_raw("PRIVMSG ".$windows[$x]." :".$message);
-									$scrollback[$x][] = " <.".$cnick."> ".$message;
-								}
-							}
-							$x++;
-						}
-					}
-				}
-				else if ($command == "notice") {
-					// Send a notice!
-					if (!isset($text[1]) || !isset($text[2])) {
-						$scrollback[$active][] = "{$lng['USAGE']}: /notice Nick/#Channel Message";
-					}
-					else {
-						$target = $text[1];
-						$message = array_slice($text, 2);
-						$message = implode(" ",$message);
-						pitc_raw("NOTICE ".$target." :".$message);
-						$scrollback[$active][] = " -".$target."- -> ".$message;
-					}
-				}
-				else if ($command == "query") {
-					if (!isset($text[1])) {
-						$scrollback[$active][] = "{$lng['USAGE']} /query nick";
-					}
-					else {
-						if ($text[1][0] == "#") {
-							$scrollback[$active][] = $lng['QUERY_CHAN'];
-						}
-						else {
-							$wid = getWid($text[1]);
-							if (!$wid) {
-								// Open a new window.
-								$windowid = count($windows);
-								$windows[] = $text[1];
-								$scrollback[$windowid] = array(" = {$lng['QUERY_OPEN']} ".$text[1]);
-								$userlist[$windowid] = array($cnick,$text[1]);
-								$active = $windowid;
-							}
-							else {
-								// Bring the window to focus.
-								$active = $wid;
-							}
-						}
-					}
-				}
-				else {
-					// Forward to Server
-					if (isset($api_commands[$command])) {
-						// Command exists in the api. Call its function
-						$args = array();
-						$args['active'] = $windows[$active];
-						$args['text'] = $tentered;
-						$args['text_array'] = explode(" ",$tentered);
-						$fnct = $api_commands[strtolower($command)];
-						call_user_func($fnct,$args);
-					}
-					else {
-						pitc_raw($tentered);
-					}
-				}
-			}
-			else {
-				if ($active == "0") {
-					$scrollback[$active][] = $colors->getColoredString($lng['STATUS_TLK'], "red");
-				}
-				else {
-					//$scrollback[$active][] = "Sending message to ".$active.":".$windows['0']; // DEBUG
-					fputs($sid,"PRIVMSG ".$windows[$active]." :".$entered."\n");
-					if ($windows[$active][0] == "#") {
-						$mynick = get_prefix($cnick,$userlist[$active]);
-					}
-					else {
-						$mynick = $cnick;
-					}
-					$scrollback[$active][] = " <".$mynick."> ".$entered;
-				}
-			}
-		}
-		else {
-			if (isset($api_commands[substr($text[0],1)])) {
-				// Command exists in the api. Call its function
-				$cmd = $text[0];
-				$fnct = $api_commands[substr($text[0],1)];
-				$args = $text;
-				$args[0] = substr($args[0],1);
-				call_user_func($fnct,$args);
-			}
-			else {
-				$scrollback[$active][] = $lng['CMD_UK'];
-			}
-		}
-	}
-	// Handle Connection
+	
+	// There is NO Buffer anymore!
+	// There are NO Commands anymore.
+	// Handle Connection - It's all we care about now.
 	if (isset($sid)) {
 		$irc = parse($sid);
 		if ($irc) {
@@ -875,7 +249,7 @@ while (1) {
 			else if ($irc_data[1] == "CAP" && $irc_data[4] == ":sasl") {
 				// SASL Time.
 				if (isset($_CONFIG['sasl']) && strtolower($_CONFIG['sasl']) == "y") {
-					$scrollback[0][] = " = IRC Network supports SASL, Using SASL! =";
+					$core->internal(" = IRC Network supports SASL, Using SASL! =");
 					pitc_raw("AUTHENTICATE PLAIN");
 				}
 			}
@@ -1345,11 +719,12 @@ while (1) {
 	$timer->checktimers();
 	usleep($refresh);
 }
+
 function pitcError($errno, $errstr, $errfile, $errline) {
-	global $active,$scrollback;
+	global $active,$core;
 	// Dirty fix to supress connection issues for now.
 	if ($errline != 171) {
-		$scrollback[$active][] = "PITC PHP Error: (Line ".$errline." called at ".__LINE__.") [$errno] $errstr in $errfile";
+		echo "PITC PHP Error: (Line ".$errline.") [$errno] $errstr in $errfile\n";
 	}
 }
 ?>

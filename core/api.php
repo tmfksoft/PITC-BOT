@@ -1,6 +1,6 @@
 <?php
 class core {
-	private internal($text) {
+	public function internal($text) {
 		global $rawlog;
 		$rawlog[] = $text;
 		echo $text."\n";
@@ -18,6 +18,7 @@ class pitcapi {
 		}
 	}
 	public function addCommand($command = false,$function = false) {
+		global $core;
 		$core->internal(" ERROR. PITCBots does not support commands! Ignoring handler.");
 	}
 	public function addTextHandler($function = false) {
