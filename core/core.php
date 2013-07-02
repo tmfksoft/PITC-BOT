@@ -45,21 +45,6 @@ if (isset($argv[1]) && $argv[1] == "-a") {
 else {
 	$autoconnect = false;
 }
-/* Handle being terminated */
-if (function_exists('pcntl_signal')) {
-	/*
-	 * Mac OS X (darwin) doesn't be default come with the pcntl module bundled
-	 * with it's PHP install.
-	 * Load it to take advantage of Signal Features.
-	*/
-	
-	/* Currently broken
-	pcntl_signal(SIGTERM, "signal_handler");
-	pcntl_signal(SIGINT, "signal_handler");
-	pcntl_signal(SIGHUP, "signal_handler");
-	pcntl_signal(SIGUSR1, "signal_handler");
-	*/
-}
 
 if (strtoupper(substr(PHP_OS, 0, 3)) != 'WIN') {
 	system("stty -icanon"); // Only Linux can do this :D
@@ -150,6 +135,7 @@ $api_connect = array();
 $api_tick = array();
 $api_raw = array();
 $api_start = array();
+$api_stop = array();
 $_PITC = array();
 
 // PITC Variables
@@ -158,6 +144,10 @@ $_PITC['altnick'] = $_CONFIG['altnick'];
 $_PITC['network'] = false;
 $_PITC['server'] = false;
 $_PITC['address'] = false;
+
+// Temp DB Data.
+$channels = array(); // Channels im in.
+$users = array(); // User info.
 
 // START Handler/Hook
 $x = 0;
@@ -197,7 +187,7 @@ if ($_SERVER['TERM'] == "screen") {
 	$core->internal(" = {$lng['SCREEN']} =");
 }
 $ann = data_get("http://announcements.pitc.x10.mx/");
-if ($ann->message != "none") { $core->internal(" ".$ann->message); }
+if ($ann != false && $ann->message != "none") { $core->internal(" ".$ann->message); }
 
 // Connect!
 $core->internal(" = {$lng['CONN_DEF']} (".$_CONFIG['address'].") =");
@@ -217,6 +207,22 @@ if (!$sid) {
 }
 else {
 	stream_set_blocking($sid, 0);
+}
+
+
+/* Handle being terminated */
+if (function_exists('pcntl_signal')) {
+	/*
+	 * Mac OS X (darwin) doesn't be default come with the pcntl module bundled
+	 * with it's PHP install.
+	 * Load it to take advantage of Signal Features.
+	*/
+	///* Currently broken
+	pcntl_signal(SIGTERM, "shutdown");
+	pcntl_signal(SIGINT, "shutdown");
+	pcntl_signal(SIGHUP, "shutdown");
+	pcntl_signal(SIGUSR1, "shutdown");
+	//*/
 }
 
 while (1) {
@@ -333,7 +339,7 @@ while (1) {
 						// CTCP!
 						$ctcp = trim($msg_d[0],"");
 						$ctcp_data = getCtcp($ctcp);
-						$scrollback[0][] = $colors->getColoredString("[".$source." ".$ctcp."]","light_red");
+						$core->internal($colors->getColoredString("[".$source." ".$ctcp."]","light_red"));
 						if ($ctcp == "PING") {
 							ctcpReply($source,$ctcp,trim($msg_d[1],""));
 						}
@@ -364,7 +370,8 @@ while (1) {
 					// No such channel. Create it.
 					$windows[] = $win;
 					$wid = getWid($win);
-					$scrollback[$active][] = $colors->getColoredString(" = {$lng['MSG_IN']} [".$wid.":".$win."] {$lng['FROM']} ".$source." = ","cyan");
+					// Wat.
+					$core->internal($colors->getColoredString(" = {$lng['MSG_IN']} [".$wid.":".$win."] {$lng['FROM']} ".$source." = ","cyan"));
 					// Get the new id.
 				}
 
@@ -381,19 +388,16 @@ while (1) {
 					// Check for Highlight!
 					if (isHighlight($words_string,$cnick)) {
 						// Highlight!
-						$scrollback[$wid][] = $colors->getColoredString("* ".$source." ".$words_string,"yellow");
-						if ($active != $wid) {
-							$scrollback[$active][] = $colors->getColoredString(" = ".$source." {$lng['HIGHLIGHT']} ".$win." = ","cyan");
-							ringBell();
-						}
+						$core->internal($colors->getColoredString($target.": * ".$source." ".$words_string,"yellow"));
 					}
 					else {
-						$scrollback[$wid][] = $colors->getColoredString("* ".$source." ".$words_string,"purple");
+						$core->internal($colors->getColoredString($target.": * ".$source." ".$words_string,"purple"));
 					}
 					// API TIME!
 					$args = array();
 					$args['active'] = $active;
-					$args['nick'] = $source;
+					$args['nick'] = str_replace(str_split('~&@%+'),'',$source);
+					$args['nick_mode'] = $source;
 					$args['channel'] = strtolower($win);
 					$args['text'] = $words_string;
 					$args['text_array'] = explode(" ",$words_string);
@@ -409,18 +413,15 @@ while (1) {
 						//$scrollback[$wid][] = $cnick." ".$_CONFIG['nick']." ".stripos($message,$cnick)." ".stripos($message,$_CONFIG['nick']); // H/L Debug
 						if (isHighlight($message,$cnick)) {
 							// Highlight!
-							$scrollback[$wid][] = $colors->getColoredString(" <".$source."> ".$message,"yellow");
-							if ($active != $wid) {
-								$scrollback[$active][] = $colors->getColoredString(" = ".$source." {$lng['HIGHLIGHT']} ".$win." = ","cyan");
-								ringBell();
-							}
+							$core->internal($colors->getColoredString($target.": <".$source."> ".$message,"yellow"));
 						}
 						else {
-							$scrollback[$wid][] = " <".$source."> ".format_text($message);
+							$core->internal($target.": <".$source."> ".format_text($message));
 						}
 						// API TIME!
 						$args = array();
-						$args['nick'] = $source;
+						$args['nick'] = str_replace(str_split('~&@%+'),'',$source);
+						$args['nick_mode'] = $source;
 						$args['channel'] = strtolower($win);
 						$args['text'] = $message;
 						$args['text_array'] = explode(" ",$message);
@@ -450,23 +451,8 @@ while (1) {
 					$string = $colors->getColoredString("  * {$lng['NICK_SELF']} ".$nnick, "green");
 					$cnick = $nnick;
 				}
-				// Shiny code, Should display nick changes only in channels that user is in.
-				// Could do with being shortened to be honest.
-				foreach ($windows as $channel) {
-					if ($channel[0] == "#" || $channel == $nick) {
-						if ($channel[0] == "#") {
-							$ison = $chan_api->ison($nick,$channel);
-							if ($ison) { pitc_raw("NAMES ".$channel); }
-						}
-						else {
-							$ison = true;
-						}
-						if ($ison) {
-							$wid = getwid($channel);
-							$scrollback[$wid][] = $string;
-						}
-					}
-				}
+				// No more shiny code, We dont care where they're in.
+				$core->internal($string);
 			}
 			else if ($irc_data[0] == "PING") {
 				// Do nothing.
@@ -479,7 +465,7 @@ while (1) {
 				$x = 0;
 				while ($x != key($scrollback)) {
 					if (isset($scrollback[$x])) {
-						$scrollback[$x][] = $colors->getColoredString(" = {$lng['DISCONNECTED']} ".$_PITC['address']." {$lng['RECONNECT']} =","blue");
+						$core->internal($colors->getColoredString(" = {$lng['DISCONNECTED']} ".$_PITC['address']." {$lng['RECONNECT']} =","blue"));
 					}
 					$x++;
 				}
@@ -595,13 +581,13 @@ while (1) {
 					$windows[$wid] = $channel;
 					pitc_raw("MODE {$channel}");
 					$userlist[$wid] = array();
-					$scrollback[$wid] = array($colors->getColoredString("  * {$lng['JOIN_SELF']} ".$channel,"green"));
+					$core->internal($colors->getColoredString("  * {$lng['JOIN_SELF']} ".$channel,"green"));
 					$active = $wid;
 				}
 				else {
 					// Someone else did.
 					$wid = getWid($channel);
-					$scrollback[$wid][] = $colors->getColoredString("  * ".$nick." (".$ex[1].") {$lng['JOIN_OTHER']} ".$channel,"green");
+					$core->internal($colors->getColoredString("  * ".$nick." (".$ex[1].") {$lng['JOIN_OTHER']} ".$channel,"green"));
 					// Recapture the userlist.
 					$userlist[$wid] = array();
 					pitc_raw("NAMES ".$channel);
@@ -634,7 +620,9 @@ while (1) {
 				}
 				// Repopulate the Userlist.
 				$userlist[$wid] = array();
-				pitc_raw("NAMES ".$channel);
+				if ($nick != $cnick) {
+					pitc_raw("NAMES ".$channel);
+				}
 				// API TIME!
 				$args = array();
 				$args['nick'] = $nick;
@@ -711,7 +699,7 @@ while (1) {
 			else {
 				$message = array_slice($irc_data, 3);
 				$message = substr(implode(" ",$message),1);
-				$scrollback['0'][] = $message;
+				$core->internal($message);
 			}
 		}
 	}

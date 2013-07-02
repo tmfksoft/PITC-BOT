@@ -23,4 +23,10 @@ function load_config() {
 		return false;
 	}
 }
+function save_config($array) {
+	$config = array();
+	foreach ($array as $x => $data) { $config[] = $x."=".urlencode($data); }
+	file_put_contents($_SERVER['PWD']."/core/config.cfg",implode("\n",$config));
+	return true;
+}
 ?>

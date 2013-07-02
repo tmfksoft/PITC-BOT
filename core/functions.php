@@ -9,7 +9,16 @@ function text_split($in) {
 }
 
 function shutdown($message = "Shutdown") {
-	global $sid;
+	global $sid,$api_stop;
+	
+	// START Handler/Hook
+	$x = 0;
+	while ($x != count($api_stop)) {
+		$args = array(); // Empty for now
+		call_user_func($api_stop[$x],$args);
+		$x++;
+	}
+	
 	if (isset($sid)) {
 		system("stty sane");
 		pitc_raw("QUIT :Leaving...");

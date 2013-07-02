@@ -57,6 +57,15 @@ class pitcapi {
 			$api_start[] = strtolower($function);
 		}
 	}
+	public function addShutDownHandler($function = false) {
+		global $core,$api_stop,$active;
+		if (!$function) {
+			$core->internal(" ERROR. Missing FUNCTION in function ADDSHUTDOWNHANDLER");
+		}
+		else {
+			$api_stop[] = strtolower($function);
+		}
+	}
 	public function addJoinHandler($function = false) {
 		global $core,$api_joins,$active;
 		if (!$function) {
@@ -165,7 +174,15 @@ class pitcapi {
 		}
 	}
 	public function quit($message = "Goodbye! For now!") {
-		global $core,$sid;
+		global $core,$sid,$api_stop;
+	
+		// START Handler/Hook
+		$x = 0;
+		while ($x != count($api_stop)) {
+			$args = array(); // Empty for now
+			call_user_func($api_stop[$x],$args);
+			$x++;
+		}
 		if ($sid) {
 			fputs($sid,"QUIT :".$message."\n");
 			fclose($sid);
