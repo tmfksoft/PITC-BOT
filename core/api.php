@@ -123,7 +123,7 @@ class pitcapi {
 		}
 		else {
 			if ($sid) {
-				fputs($sid,"PRIVMSG ".$channel." :".$text."\n");
+				socket_write($sid,"PRIVMSG ".$channel." :".$text."\n");
 				if ($log_irc) {
 					$core->internal($channel.": <".$cnick."> ".$text);
 				}
@@ -143,7 +143,7 @@ class pitcapi {
 		}
 		else {
 			if ($sid) {
-				fputs($sid,"NOTICE ".$channel." :".$text."\n");
+				socket_write($sid,"NOTICE ".$channel." :".$text."\n");
 				if ($log_irc) {
 					$core->internal(" -".$cnick."- -> ".$text);
 				}
@@ -163,7 +163,7 @@ class pitcapi {
 		}
 		else {
 			if ($sid) {
-				fputs($sid,"PRIVMSG ".$channel." :ACTION ".$text."\n");
+				socket_write($sid,"PRIVMSG ".$channel." :ACTION ".$text."\n");
 				if ($log_irc) {
 					$core->internal($channel.": ".$colors->getColoredString("* ".$cnick." ".$text,"purple"));
 				}
@@ -184,7 +184,7 @@ class pitcapi {
 			$x++;
 		}
 		if ($sid) {
-			fputs($sid,"QUIT :".$message."\n");
+			socket_write($sid,"QUIT :".$message."\n");
 			fclose($sid);
 		}
 		die();
@@ -192,7 +192,7 @@ class pitcapi {
 	public function part($channel = false,$message = "Parting!") {
 		global $core,$sid,$scrollback;
 		if ($sid) {
-			fputs($sid,"PART ".$channel." :".$message."\n");
+			socket_write($sid,"PART ".$channel." :".$message."\n");
 		}
 		else {
 			$core->internal(" ERROR. Not connected to IRC! Cannot part.");
@@ -201,7 +201,7 @@ class pitcapi {
 	public function join($channel = false) {
 		global $core,$sid,$scrollback;
 		if ($sid) {
-			fputs($sid,"JOIN ".$channel."\n");
+			socket_write($sid,"JOIN ".$channel."\n");
 		}
 		else {
 			$core->internal(" ERROR. Not connected to IRC! Cannot join.");
@@ -214,7 +214,7 @@ class pitcapi {
 		}
 		else {
 			if ($sid) {
-				fputs($sid,"NICK :".$nick."\n");
+				socket_write($sid,"NICK :".$nick."\n");
 			}
 			$_CONFIG['nick'] = $nick;
 		}
@@ -222,7 +222,7 @@ class pitcapi {
 	public function raw($text = false) {
 		global $core,$sid,$scrollback;
 		if ($sid) {
-			fputs($sid,$text."\n");
+			socket_write($sid,$text."\n");
 		}
 		else {
 			$core->internal(" ERROR. Unable to send RAW Data, not connected to IRC!");
@@ -239,7 +239,7 @@ class pitcapi {
 		else {
 			if ($chan[0] == "#") {
 				if ($sid) {
-					fputs($sid,"MODE {$chan} {$mode}\n");
+					socket_write($sid,"MODE {$chan} {$mode}\n");
 				}
 				else {
 					$core->internal(" ERROR. Unable to set MODE. Not connected to IRC.");
@@ -277,7 +277,7 @@ class pitcapi {
 		}
 		else {
 			if ($sid) {
-				fputs($sid,"TOPIC {$chan} :{$text}\n");
+				socket_write($sid,"TOPIC {$chan} :{$text}\n");
 			}
 			else {
 				$core->internal(" ERROR. Unable to set TOPIC in {$chan}. Not connected to IRC.");
@@ -363,7 +363,7 @@ class channel {
 	}
 	public function users($chan) {
 		global $core,$userlist;
-		$chan = getWid($chan);
+		$chan = strtolower(getWid($chan));
 		if ($chan) {
 			if (isset($userlist[$chan])) {
 				return $userlist[$chan];
@@ -381,7 +381,12 @@ class channel {
 		/* Derived from GetPrefix() */
 		/* Used in the core, dont remove or edit! */
 		if ($chan == FALSE) { $wid = $active; } else { $wid = getwid($chan); }
-		$nicks = $userlist[$wid];
+		if (isset($userlist[$wid])) {
+			$nicks = $userlist[$wid];
+		}
+		else {
+			$nicks = 0;
+		}
 		if ($nicks > 0) {
 			$nick = strtolower($user);
 			$nicknames = array();

@@ -8,7 +8,7 @@ function text_split($in) {
 	return array($a,$b);
 }
 
-function shutdown($message = "Shutdown") {
+function shutdown($message = "Shutdown",$isexec = false) {
 	global $sid,$api_stop;
 	
 	// START Handler/Hook
@@ -22,17 +22,27 @@ function shutdown($message = "Shutdown") {
 	if (isset($sid)) {
 		system("stty sane");
 		pitc_raw("QUIT :Leaving...");
-		fclose($sid);
+		socket_close($sid);
 	}
-	die($message);
+	if ($isexec) {
+		die(shell_exec($message));
+	}
+	else {
+		die($message);
+	}
 }
 
 function connect($nick,$address,$port,$ssl = false,$password = false) {
 	global $_CONFIG,$domain,$sasl,$api;
 	if ($ssl) { $address = "ssl://".$address; }
 	echo "\n\n ## Connecting to {$address} on port {$port} ## \n\n";
-	$fp = @fsockopen($address,$port, $errno, $errstr, 5);
-	if ($fp) {
+	$fp = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+	if (isset($_CONFIG['bindip'])) {
+		socket_bind($fp,$_CONFIG['bindip']);
+	}
+	//$fp = @fsockopen($address,$port, $errno, $errstr, 5);
+	$result = @socket_connect($fp,$address,$port);
+	if ($result) {
 		if (isset($_CONFIG['sasl'])) {
 			if (strtolower($_CONFIG['sasl']) == "y") { pitc_raw("CAP REQ :sasl",$fp); }
 		}
@@ -50,36 +60,40 @@ function connect($nick,$address,$port,$ssl = false,$password = false) {
 function parse($rid) {
 	global $core,$active,$_CONFIG,$cnick,$rawlog;
 	//echo "Handling bot with RID ".$rid."\n";
-	if ($data = fgets($rid)) {
+	if ($data = socket_read($rid,2048)) {
 		$data = trim($data);
 		$rawlog[] = "S: ".$data;
 		flush();
-		$ex = explode(' ', $data);
-		if ($ex[0] == "PING") {
-			pitc_raw("PONG ".$ex[1]);
-		}
-		else if ($ex[1] == "001") {
-			$core->internal(" = Connected to IRC! =");
-			// Ajoin!
-			if (isset($_CONFIG['ajoin'])) {
-				$chans = explode(" ",$_CONFIG['ajoin']);
-				$rawjoin = "JOIN ";
-				foreach ($chans as $x => $chan) {
-					if ($x != count($chans)-1) {
-						$rawjoin .= "{$chan},";
-					}
-					else {
-						$rawjoin .= $chan;
-					}
-				}
-				pitc_raw($rawjoin);
+		$lines = explode("\n",$data);
+		foreach ($lines as $line) {
+			$ex = explode(' ', $line);
+			if ($ex[0] == "PING") {
+				$core->internal(" LINE ".__LINE__." DEBUG: PONG Reply");
+				pitc_raw("PONG ".$ex[1]);
 			}
-		}
-		else if ($ex[1] == "433") {
-			// Nick in use.
-			$core->internal(" = Nick in use. Changing to alternate nick! =");
-			$cnick = $_CONFIG['altnick'];
-			pitc_raw("NICK :".$cnick);
+			if ($ex[1] == "001") {
+				$core->internal(" = Connected to IRC! =");
+				// Ajoin!
+				if (isset($_CONFIG['ajoin'])) {
+					$chans = explode(" ",$_CONFIG['ajoin']);
+					$rawjoin = "JOIN ";
+					foreach ($chans as $x => $chan) {
+						if ($x != count($chans)-1) {
+							$rawjoin .= "{$chan},";
+						}
+						else {
+							$rawjoin .= $chan;
+						}
+					}
+					pitc_raw($rawjoin);
+				}
+			}
+			if ($ex[1] == "433") {
+				// Nick in use.
+				$core->internal(" = Nick in use. Changing to alternate nick! =");
+				$cnick = $_CONFIG['altnick'];
+				pitc_raw("NICK :".$cnick);
+			}
 		}
 	}
 	return $data;
@@ -89,7 +103,7 @@ function pitc_raw($text,$sock = false) {
 	if ($sock) { $fp = $sock; }
 	else { $fp = $sid; }
 	$rawlog[] = "C: {$text}";
-	return fputs($fp,"{$text}\n");
+	return socket_write($fp,"{$text}\n");
 }
 function load_script($file) {
 	global $core;
@@ -107,18 +121,18 @@ function load_script($file) {
 	}
 }
 function getWid($name) {
-	global $windows;
-	$wins = array_map('strtolower', $windows);
-	$id = array_search(strtolower($name), $wins);
-	return $id;
+	//global $windows;
+	//$wins = array_map('strtolower', $windows);
+	//$id = array_search(strtolower($name), $wins);
+	return strtolower($name);
 }
 function ctcpReply($nick,$ctcp,$text) {
 	global $sid;
-	fputs($sid,"NOTICE ".$nick." :".$ctcp." ".$text."\n");
+	socket_write($sid,"NOTICE ".$nick." :".$ctcp." ".$text."\n");
 }
 function ctcp($nick,$ctcp) {
 	global $sid;
-	fputs($sid,"PRIVMSG ".$nick." :".$ctcp."\n");
+	socket_write($sid,"PRIVMSG ".$nick." :".$ctcp."\n");
 }
 function getCtcp($ctcp) {
 	global $ctcps,$version,$start_stamp;
@@ -249,7 +263,7 @@ function is_connected() {
     $connected = @fsockopen("google.com",80); //website and port
     if ($connected) {
         $is_conn = true; //action when connected
-        fclose($connected);
+        socket_close($connected);
     }
 	else {
         $is_conn = false; //action in connection failure
