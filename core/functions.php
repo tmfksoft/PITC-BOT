@@ -7,10 +7,20 @@ function text_split($in) {
 	$b = substr($in,0,(0-($len/2)));
 	return array($a,$b);
 }
-
+function update_hostname($nick,$host = false) {
+	global $_PITC;
+	$nick = strtolower($nick);
+	if ($host != false) {
+		$_PITC['hosts'][$nick] = $host;
+	} else {
+		unset($_PITC['hosts'][$nick]);
+	}
+}
 function shutdown($message = "Shutdown",$isexec = false) {
-	global $sid,$api_stop;
-	
+	global $sid,$api_stop,$api,$core;
+	if (isset($api) && $api != NULL) {
+		$api->log($core->lang('CLOSING'));
+	}
 	// START Handler/Hook
 	$x = 0;
 	while ($x != count($api_stop)) {
@@ -18,7 +28,9 @@ function shutdown($message = "Shutdown",$isexec = false) {
 		call_user_func($api_stop[$x],$args);
 		$x++;
 	}
-	
+	global $cfg;
+	// Save any changes to the config
+	$cfg->save("core");
 	if (isset($sid)) {
 		system("stty sane");
 		pitc_raw("QUIT :Leaving...");
@@ -33,23 +45,23 @@ function shutdown($message = "Shutdown",$isexec = false) {
 }
 
 function connect($nick,$address,$port,$ssl = false,$password = false) {
-	global $_CONFIG,$domain,$sasl,$api;
+	global $cfg,$domain,$sasl,$api,$core;
 	if ($ssl) { $address = "ssl://".$address; }
-	echo "\n\n ## Connecting to {$address} on port {$port} ## \n\n";
+	$core->internal(" ## Connecting to {$address} on port {$port} ##");
 	$fp = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
-	if (isset($_CONFIG['bindip'])) {
-		socket_bind($fp,$_CONFIG['bindip']);
+	if ($cfg->get("core","bindip")) {
+		socket_bind($fp,$cfg->get("core","bindip"));
 	}
 	//$fp = @fsockopen($address,$port, $errno, $errstr, 5);
 	$result = @socket_connect($fp,$address,$port);
 	if ($result) {
-		if (isset($_CONFIG['sasl'])) {
-			if (strtolower($_CONFIG['sasl']) == "y") { pitc_raw("CAP REQ :sasl",$fp); }
+		if ($cfg->get("core","sasl")) {
+			if (strtolower($cfg->get("core","sasl")) == "y") { pitc_raw("CAP REQ :sasl",$fp); }
 		}
 		if ($password) { pitc_raw("PASS :".$password,$fp); }
 		pitc_raw("NICK ".$nick,$fp);
-		$ed = explode("@",$_CONFIG['email']);
-        pitc_raw('USER '.$ed[0].' "'.$ed[1].'" "'.$address.'" :'.$_CONFIG['realname'],$fp);
+		$ed = explode("@",$cfg->get("core","email"));
+        pitc_raw('USER '.$ed[0].' "'.$ed[1].'" "'.$address.'" :'.$cfg->get("core","realname"),$fp);
 		return $fp;
 	}
 	else {
@@ -58,24 +70,25 @@ function connect($nick,$address,$port,$ssl = false,$password = false) {
 	}
 }
 function parse($rid) {
-	global $core,$active,$_CONFIG,$cnick,$rawlog;
+	global $core,$active,$cfg,$cnick,$rawlog;
 	//echo "Handling bot with RID ".$rid."\n";
 	if ($data = socket_read($rid,2048)) {
 		$data = trim($data);
-		$rawlog[] = "S: ".$data;
+		$core->writeLog(true);
 		flush();
 		$lines = explode("\n",$data);
 		foreach ($lines as $line) {
+			$rawlog[] = "S: ".$line;
 			$ex = explode(' ', $line);
 			if ($ex[0] == "PING") {
-				$core->internal(" LINE ".__LINE__." DEBUG: PONG Reply");
+				//$core->internal(" LINE ".__LINE__." DEBUG: PONG Reply");
 				pitc_raw("PONG ".$ex[1]);
 			}
-			if ($ex[1] == "001") {
+			if (isset($ex[1]) && $ex[1] == "001") {
 				$core->internal(" = Connected to IRC! =");
 				// Ajoin!
-				if (isset($_CONFIG['ajoin'])) {
-					$chans = explode(" ",$_CONFIG['ajoin']);
+				if ($cfg->get("core","ajoin")) {
+					$chans = explode(" ",$cfg->get("core","ajoin"));
 					$rawjoin = "JOIN ";
 					foreach ($chans as $x => $chan) {
 						if ($x != count($chans)-1) {
@@ -85,13 +98,14 @@ function parse($rid) {
 							$rawjoin .= $chan;
 						}
 					}
+					$core->internal(" Attempting to automatically join {$chan}.");
 					pitc_raw($rawjoin);
 				}
 			}
-			if ($ex[1] == "433") {
+			if (isset($ex[1]) && $ex[1] == "433") {
 				// Nick in use.
 				$core->internal(" = Nick in use. Changing to alternate nick! =");
-				$cnick = $_CONFIG['altnick'];
+				$cnick = $cfg->get("core","altnick");
 				pitc_raw("NICK :".$cnick);
 			}
 		}
@@ -99,10 +113,11 @@ function parse($rid) {
 	return $data;
 }
 function pitc_raw($text,$sock = false) {
-	global $sid,$rawlog;
+	global $sid,$rawlog,$core;
 	if ($sock) { $fp = $sock; }
 	else { $fp = $sid; }
 	$rawlog[] = "C: {$text}";
+	$core->writeLog(true);
 	return socket_write($fp,"{$text}\n");
 }
 function load_script($file) {
@@ -127,7 +142,8 @@ function getWid($name) {
 	return strtolower($name);
 }
 function ctcpReply($nick,$ctcp,$text) {
-	global $sid;
+	global $sid,$core,$colors;
+	$core->internal($colors->getColoredString(" [".trim($nick)." ".$ctcp."] {$text}","light_red"));
 	socket_write($sid,"NOTICE ".$nick." :".$ctcp." ".$text."\n");
 }
 function ctcp($nick,$ctcp) {
@@ -135,8 +151,8 @@ function ctcp($nick,$ctcp) {
 	socket_write($sid,"PRIVMSG ".$nick." :".$ctcp."\n");
 }
 function getCtcp($ctcp) {
-	global $ctcps,$version,$start_stamp;
-	$ctcps['VERSION'] = "PITC v".$version." by Thomas Edwards";
+	global $ctcps,$version,$start_stamp,$append;
+	$ctcps['VERSION'] = "PITC{$append} v".$version." by Thomas Edwards";
 	$ctcps['UPTIME'] = string_duration(time(),$start_stamp);
 	$ctcp = strtoupper($ctcp);
 	if (isset($ctcps[$ctcp])) {
@@ -146,8 +162,13 @@ function getCtcp($ctcp) {
 		return false;
 	}
 }
+function version() {
+	global $append,$version;
+	return "PITC{$append} v".$version." by Thomas Edwards";
+}
 function ringBell() {
-	echo chr(7);
+	global $core;
+	$core->internal(chr(7));
 }
 function isHighlight($text,$nick) {
 	if (is_array($text)) { $text = implode(" ",$text); }
@@ -251,7 +272,7 @@ function ircexplode($str) {
 }
 function data_get($url = false) {
 	if ($url) {
-		$data = file_get_contents("http://announcements.pitc.x10.mx/");
+		$data = file_get_contents($url);
 		$array = json_decode($data);
 		return $array;
 	}
@@ -279,7 +300,7 @@ function nick_tab($nicks,$text,$tab = 0) {
 	
 	$nicknames = array();
 	foreach ($nicks as $name) {
-		$nicknames[] = trim(strtolower($name),"~&@%+");
+		$nicknames[] = trim(strtolower($name),"!~&@%+");
 	}
 	$data = strtolower($data);
 	$ret = preg_grep("/^{$data}.*/", $nicknames);
@@ -289,7 +310,7 @@ function nick_tab($nicks,$text,$tab = 0) {
 		$ret = array_values($ret);
 		$ret = $ret[$tab];
 		echo "I found {$ret}!\n";
-		return trim($nicks[$key],"~&@%+");
+		return trim($nicks[$key],"!~&@%+");
 	}
 	else {
 		return false;
@@ -303,7 +324,7 @@ function get_prefix($nick,$nicks = array()) {
 			$nicknames[] = strtolower($name);
 		}
 		$nick = strtolower($nick);
-		$ret = preg_grep("/(~|&|@|\%|\+|){$nick}$/", $nicknames);
+		$ret = preg_grep("/(!|~|&|@|\%|\+|){$nick}$/", $nicknames);
 		if ($ret > 0 && $ret != FALSE) {
 			reset($ret);
 			$key = key($ret);

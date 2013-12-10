@@ -28,7 +28,54 @@ class database {
 		}
 	}
 	function update($name,$values,$cond = false) {
-	
+		global $api,$_DATABASE;
+		$name = strtolower($name);
+		if (isset($_DATABASE[$name])) {
+			if ($cond) {
+				// Conditional supplied
+				$r = 0;
+				foreach ($_DATABASE[$name] as $a_index => $a_value) {
+					// Cycle each array in the database
+					// cycle each value 
+					foreach ($cond as $c_index => $c_value) {
+						// cycle each conditional
+						$preg = "/^".str_replace("%","(.*)",$c_value)."$/i";
+						if (isset($a_value[$c_index])) {
+							// Does the database array even have the cond index?
+							if (preg_match($preg,$c_value)) {
+								// So fun.
+								$_DATABASE[$name][$c_index] = $values[$c_index];
+								$r++;
+							} else {
+								echo "No match for '{$preg}' in {$c_value}!\n";
+							}
+						} else {
+							echo "No such index as {$c_index}\n";
+						}
+					}
+				}
+				if ($r == 0) {
+					$api->log(" [DB] No data was updated, nothing matched!");
+				}
+				return true;
+			} else {
+				// Update everything.
+			}
+		} else {
+			$api->log(" [DB] Unable to modify data in {$name}! Database not loaded.");
+			return false;
+		}
+	}
+	function replace($name,$data) {
+		global $api,$_DATABASE;
+		$name = strtolower($name);
+		if (isset($_DATABASE[$name])) {
+			$_DATABASE[$name] = $data;
+			return true;
+		} else {
+			$api->log(" [DB] Unable to modify data in {$name}! Database not loaded.");
+			return false;
+		}
 	}
 	function remove($name,$values,$cond = false) {
 		global $api,$_DATABASE;
@@ -36,7 +83,25 @@ class database {
 		if (isset($_DATABASE[$name])) {
 			if ($cond) {
 				// Search Stuff
-				// WIP!
+				$return = array();
+				$r = 0;
+				foreach ($_DATABASE[$name] as $col => $row) {
+					// Now the fun begins.
+					foreach ($cond as $col => $val) {
+						$preg = "/^".str_replace("%","(.*)",$val)."$/i";
+						if (isset($row[$col])) {
+							if (preg_match($preg,$row[$col])) {
+								// Matches. Remove the whle row.
+								unset($_DATABASE[$name][$col]);
+								$r++;
+							}
+						}
+					}
+				}
+				if ($r == 0) {
+					$api->log(" [DB] Removed no data in {$name}, nothing matched!");
+				}
+				return true;
 			} else {
 				// Return everything.
 				return $_DATABASE[$name];

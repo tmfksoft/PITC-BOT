@@ -1,30 +1,217 @@
 <?php
+// PITCBots CORE
+$pitc_log = array();
 class core {
-	public function internal($text) {
-		global $rawlog;
-		$rawlog[] = $text;
-		echo $text."\n";
+	public function internal($text,$type = "CORE") {
+		global $pitc_log;
+		if ($type == "CORE") {
+			$str = " [{$type}] ".$text;
+		} else {
+			$str = "  [{$type}] ".$text;
+		}
+		$pitc_log[] = $str;
+		//ob_end_clean();
+		echo $str."\n";
+		//ob_start();
+		$this->writeLog();
+	}
+	public function lang($item) {
+		global $lng;
+		if (isset($lng[$item])) {
+			return $lng[$item];
+		} else {
+			return false;
+		}
+	}
+	public function writeLog($raw = false) {
+		global $pitc_log,$rawlog;
+		// Our Log Stamp
+		$stamp = date('d-m-Y');
+		
+		// load in the previous log.
+		if ($raw) {
+			if (file_exists("logs/{$stamp}-raw.log")) {
+				$log = explode("\n",file_get_contents("logs/{$stamp}-raw.log"));
+			} else {
+				$log = array();
+			}
+		} else {
+			if (file_exists("logs/{$stamp}.log")) {
+				$log = explode("\n",file_get_contents("logs/{$stamp}.log"));
+			} else {
+				$log = array();
+			}
+		}
+		
+		// Merge old data with new. IF there is any old.
+		$data = array();
+		if (count($log) >= 1) {
+			foreach ($log as $old) {
+				$data[] = trim($old);
+			}
+		}
+		if ($raw) {
+			foreach ($rawlog as $new) {
+				$data[] = trim($new);
+			}
+		} else {
+			foreach ($pitc_log as $new) {
+				if (preg_match("/\[(.*)\] \[[0-9]+;[0-9]+m (.*)\[0m/",$new,$matches)) {
+					$str = trim("[{$matches[1]}]  {$matches[2]}");
+				} else {
+					$str = trim($new);
+				}
+				$data[] = trim($str,"");
+			}
+		}
+		
+		if (!file_exists("logs") || !is_dir("logs")) {
+		
+			if (!file_exists("logs/")) {
+				$dir = "logs";
+				mkdir("logs/");
+			} else if (!is_dir("logs/")) {
+				$dir = "logs_pitc";
+				if (!file_exists("logs_pitc/")) {
+					mkdir("logs/");
+				} else if (is_file("logs_pitc/")) {
+					echo "Unable to init log!\n";
+				}
+			}
+			
+		} else {
+			$dir = "logs";
+		}
+		if ($raw) {
+			$rawlog = array();
+			file_put_contents($dir."/".$stamp."-raw.log",implode("\n",$data));
+		} else {
+			$pitc_log = array();
+			file_put_contents($dir."/".$stamp.".log",implode("\n",$data));
+		}
+	}
+	public function spoon() {
+		return "There is no spoon.";
+	}
+	public function userlist($chan) {
+		$userlist = new userlist($chan);
+		return $userlist;
+	}
+	public function user($nick) {
+		return new users($nick);
 	}
 }
 $core = new core;
+class userlist {
+	public $channel = null;
+	function __construct($chan) {
+		global $api;
+		$api->log("Construct called");
+		$this->channel = $chan;
+	}
+	public function append($channel,$user) {
+	
+	}
+	public function remove($channel,$user) {
+	}
+	public function clear($channel,$user) {
+	
+	}
+	public function get() {
+		return array("channel"=>$this->channel);
+	}
+}
+class users {
+	public $username = null;
+	function __construct($uname) {
+		global $_PITC;
+		$this->username = $uname;
+		if (isset($_PITC['users'][md5(strtolower($uname))])) {
+			foreach ($_PITC['users'][md5(strtolower($uname))] as $var => $val) {
+				echo "Setting $"."this->{$var} to {$val}\n";
+				if (!is_array($val)) {
+					echo "$var is str\n";
+					eval('$this->'.$var.' = "'.$val.'";');
+				} else {
+					echo "$var is arry\n";
+					eval('$this->'.$var.' = json_decode(\''.json_encode($val).'\',true);');
+				}
+			}
+		}
+	}
+	function add($data = array()) {
+		global $_PITC;
+		$data['nick'] = $this->username;
+		$_PITC['users'][md5(strtolower($this->username))] = $data;
+	}
+	function hostmask($host = false) {
+		global $_PITC;
+		if (!$host) {
+			// Return mask
+			$host = $_PITC['users'][md5(strtolower($this->username))]['host'];
+			return $host;
+		} else {
+			// Set mask
+			$_PITC['users'][md5(strtolower($this->username))]['host'] = $host;
+			return true;
+		}
+	}
+}
+$_PITC['users'] = array();
+
+// PITCBots API
 class pitcapi {
 	public function log($text = false) {
 		global $core,$cserver;
 		if (!$text) {
-			die("Error. Missing TEXT in function LOG");
+			die("{$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} LOG");
 		}
 		else {
-			$core->internal($text);
+			$core->internal($text,"API");
 		}
+	}
+	public function getHost($nick = false) {
+		global $_PITC,$cnick;
+		if ($nick) {
+			$nick = strtolower($nick);
+		} else {
+			$nick = strtolower($cnick);
+		}
+		if (isset($_PITC['hosts'][$nick])) {
+			return $_PITC['hosts'][$nick];
+		} else {
+			return false;
+		}
+	}
+	public function setHost($nick = false,$host = false) {
+		global $_PITC;
+		if ($nick) {
+			$nick = strtolower($nick);
+		} else {
+			$nick = strtolower($cnick);
+		}
+		if (!$host) {
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} HOST {$core->lang('API_INFUNC')} SETHOST");
+		}
+		update_hostname($nick,$host);
+	}
+	public function delHost($nick = false) {
+		global $_PITC;
+		if ($nick) {
+			$nick = strtolower($nick);
+		} else {
+			$nick = strtolower($cnick);
+		}
+		update_hostname($nick);
 	}
 	public function addCommand($command = false,$function = false) {
 		global $core;
-		$core->internal(" ERROR. PITCBots does not support commands! Ignoring handler.");
+		$core->internal(" ".$core->lang('API_ERROR_COMMAND'));
 	}
 	public function addTextHandler($function = false) {
 		global $core,$api_messages,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDTEXTHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDTEXTHANDLER");
 		}
 		else {
 			$api_messages[] = strtolower($function);
@@ -33,7 +220,7 @@ class pitcapi {
 	public function addConnectHandler($function = false) {
 		global $core,$api_connect,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDCONNECTHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDCONNECTHANDLER");
 		}
 		else {
 			$api_connect[] = strtolower($function);
@@ -42,7 +229,7 @@ class pitcapi {
 	public function addActionHandler($function = false) {
 		global $core,$api_actions,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDACTIONHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDACTIONHANDLER");
 		}
 		else {
 			$api_actions[] = strtolower($function);
@@ -51,7 +238,7 @@ class pitcapi {
 	public function addStartHandler($function = false) {
 		global $core,$api_start,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDSTARTHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDSTARTHANDLER");
 		}
 		else {
 			$api_start[] = strtolower($function);
@@ -60,7 +247,7 @@ class pitcapi {
 	public function addShutDownHandler($function = false) {
 		global $core,$api_stop,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDSHUTDOWNHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDSHUTDOWNHANDLER");
 		}
 		else {
 			$api_stop[] = strtolower($function);
@@ -69,7 +256,7 @@ class pitcapi {
 	public function addJoinHandler($function = false) {
 		global $core,$api_joins,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDJOINHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDJOINHANDLER");
 		}
 		else {
 			$api_joins[] = strtolower($function);
@@ -78,7 +265,7 @@ class pitcapi {
 	public function addPartHandler($function = false) {
 		global $core,$api_parts,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDPARTHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDPARTHANDLER");
 		}
 		else {
 			$api_parts[] = strtolower($function);
@@ -87,7 +274,7 @@ class pitcapi {
 	public function addTickHandler($function = false) {
 		global $core,$api_tick,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDTICKHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDTICKHANDLER");
 		}
 		else {
 			$api_tick[] = strtolower($function);
@@ -96,7 +283,7 @@ class pitcapi {
 	public function addRawHandler($function = false) {
 		global $core,$api_raw,$active;
 		if (!$function) {
-			$core->internal(" ERROR. Missing FUNCTION in function ADDRAWHANDLER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} ADDRAWHANDLER");
 		}
 		else {
 			$api_raw[] = strtolower($function);
@@ -106,7 +293,7 @@ class pitcapi {
 	public function pecho($text = false,$window = false) {
 		global $core,$active;
 		if (!$text) {
-			$core->internal(" ERROR. Missing TEXT in function PECHO");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} PECHO");
 		}
 		else {
 			// PITCBots unlike PITC lacks windows and only has one window, The Terminal
@@ -116,10 +303,10 @@ class pitcapi {
 	public function msg($channel = false,$text = false) {
 		global $core,$log_irc, $sid, $cnick;
 		if (!$channel) {
-			$core->internal(" ERROR. Missing TEXT in function MSG");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} MSG");
 		}
 		else if (!$text) {
-			$core->internal(" ERROR. Missing TEXT in function MSG");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} MSG");
 		}
 		else {
 			if ($sid) {
@@ -136,10 +323,10 @@ class pitcapi {
 	public function notice($channel = false,$text = false) {
 		global $core,$log_irc, $sid, $cnick;
 		if (!$channel) {
-			$core->internal(" ERROR. Missing TEXT in function NOTICE");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} NOTICE");
 		}
 		else if (!$text) {
-			$core->internal(" ERROR. Missing TEXT in function NOTICE");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} NOTICE");
 		}
 		else {
 			if ($sid) {
@@ -156,10 +343,10 @@ class pitcapi {
 	public function action($channel = false,$text = false) {
 		global $core,$log_irc, $colors, $sid, $cnick;
 		if (!$channel) {
-			$core->internal(" ERROR. Missing TEXT in function ACTION");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} ACTION");
 		}
 		else if (!$text) {
-			$core->internal(" ERROR. Missing TEXT in function ACTION");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} ACTION");
 		}
 		else {
 			if ($sid) {
@@ -187,6 +374,7 @@ class pitcapi {
 			socket_write($sid,"QUIT :".$message."\n");
 			fclose($sid);
 		}
+		$api->log($core->lang('CLOSING'));
 		die();
 	}
 	public function part($channel = false,$message = "Parting!") {
@@ -210,7 +398,7 @@ class pitcapi {
 	public function nick($nick = false) {
 		global $core,$sid,$scrollback;
 		if ($nick == false) {
-			$core->internal(" ERROR. Missing NICK in function NICK");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} NICK {$core->lang('API_INFUNC')} NICK");
 		}
 		else {
 			if ($sid) {
@@ -231,10 +419,10 @@ class pitcapi {
 	public function mode($chan = false,$mode = false) {
 		global $core,$sid,$scrollback;
 		if (!$chan) {
-			$core->internal(" ERROR. Missing CHANNEL in function MODE");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} CHANNEL {$core->lang('API_INFUNC')} MODE");
 		}
 		else if (!$mode) {
-			$core->internal(" ERROR. Missing MODE(S) in function MODE");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} MODE(S) {$core->lang('API_INFUNC')} MODE");
 		}
 		else {
 			if ($chan[0] == "#") {
@@ -246,17 +434,17 @@ class pitcapi {
 				}
 			}
 			else {
-				$core->internal(" ERROR. Invalid CHANNEL in function MODE");
+				$core->internal(" ERROR. Invalid CHANNEL {$core->lang('API_INFUNC')} MODE");
 			}
 		}
 	}
 	public function ctcp($nick = false,$ctcp = false) {
 		global $core,$sid,$scrollback;
 		if (!$nick) {
-			$core->internal(" ERROR. Missing NICK in function CTCP");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} NICK {$core->lang('API_INFUNC')} CTCP");
 		}
 		else if (!$ctcp) {
-			$core->internal(" ERROR. Missing CTCP in function CTCP");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} CTCP {$core->lang('API_INFUNC')} CTCP");
 		}
 		else {
 			if ($sid) {
@@ -270,10 +458,10 @@ class pitcapi {
 	public function topic($chan = false,$text = false) {
 		global $core,$sid,$scrollback;
 		if (!$chan) {
-			$core->internal(" ERROR. Missing CHANNEL in function TOPIC");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} CHANNEL {$core->lang('API_INFUNC')} TOPIC");
 		}
 		else if (!$ctcp) {
-			$core->internal(" ERROR. Missing CHANNEL in function TOPIC");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} CHANNEL {$core->lang('API_INFUNC')} TOPIC");
 		}
 		else {
 			if ($sid) {
@@ -287,13 +475,13 @@ class pitcapi {
 	public function ctcpreply($nick = false,$ctcp = false,$text = false) {
 		global $core,$sid,$scrollback;
 		if (!$nick) {
-			$core->internal(" ERROR. Missing NICK in function CTCPREPLY");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} NICK {$core->lang('API_INFUNC')} CTCPREPLY");
 		}
 		else if (!$ctcp) {
-			$core->internal(" ERROR. Missing CTCP in function CTCPREPLY");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} CTCP {$core->lang('API_INFUNC')} CTCPREPLY");
 		}
 		else if (!$text) {
-			$core->internal(" ERROR. Missing TEXT in function CTCPREPLY");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} CTCPREPLY");
 		}
 		else {
 			if ($sid) {
@@ -410,10 +598,10 @@ class timer {
 		global $core,$timers,$scrollback;
 		if ($delay == false | $function == false) {
 			if (!$delay) {
-				$core->internal(" ERROR. Missing DELAY in function TIMER->ADDTIMER");
+				$core->internal(" {$core->lang('API_ERROR_MISSING')} DELAY {$core->lang('API_INFUNC')} TIMER->ADDTIMER");
 			}
 			else {
-				$core->internal(" ERROR. Missing FUNCTION in function TIMER->ADDTIMER");
+				$core->internal(" {$core->lang('API_ERROR_MISSING')} FUNCTION {$core->lang('API_INFUNC')} TIMER->ADDTIMER");
 			}
 			return false;
 		}
@@ -425,7 +613,7 @@ class timer {
 			$dat['args'] = $args;
 			$dat['next'] = $this->calcnext($delay);
 			$timers[] = $dat;
-			$core->internal(" Added Timer with delay {$delay}");
+			$core->internal(" {$core->lang('API_ADDED')} '{$function}' {$core->lang('API_TMER_ADDED')} {$delay}");
 			end($timers); 
 			return $timers[key($timers)]; 
 		}
@@ -434,7 +622,7 @@ class timer {
 		// Deletes a timer with the specified ID.
 		global $core,$timers;
 		if (!$id) {
-			$core->internal(" ERROR. Missing ID in function TIMER->DELTIMER");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} ID {$core->lang('API_INFUNC')} TIMER->DELTIMER");
 		}
 		else {
 			if (isset($timers[$id])) {
@@ -461,7 +649,7 @@ class timer {
 					$timers[$id]['rep']--;
 					if ($timers[$id]['rep'] == 0) {
 						// Remove - Actually a Debug Line I never removed but in this case Its good.
-						$core->internal(" Unset timer {$id} running funct '{$tmr['function']}'");
+						$core->internal(" Unset timer {$id} running function '{$tmr['function']}'");
 						unset($timers[$id]);
 					}
 				}
@@ -472,7 +660,7 @@ class timer {
 		global $core,$scrollback;
 		// Returns the contents of $text in seconds, e.g. 1m = 60 Seconds
 		if (!$text) {
-			$core->internal(" ERROR. Missing TEXT in function TIMER->TEXTOSEC");
+			$core->internal(" {$core->lang('API_ERROR_MISSING')} TEXT {$core->lang('API_INFUNC')} TIMER->TEXTOSEC");
 		}
 		else {
 		if (is_numeric($text)) {
